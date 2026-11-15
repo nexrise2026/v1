@@ -1,0 +1,743 @@
+Build a complete, responsive React + TypeScript + Tailwind CSS web application called "NIRVAHA AI — Multilingual Public Service Navigation Agent".
+
+The app must be fully functional, fast, mobile-first, and fully localized. Do not create placeholder screens. Implement all tabs, forms, filters, voice features, and AI chat behavior described below.
+
+========================================
+1. GLOBAL APP ARCHITECTURE
+========================================
+
+Use a global React Context to store:
+
+- selectedLanguage: language name, native name, BCP-47 code, and text direction
+- userProfile: fullName, role, state, district, category, annualIncome, rationCard, gender, ageOrProofNumber
+- activeTab
+- chatMessages
+- voiceTranscript
+- pendingVoiceQuery
+- customTasks
+- consentPreferences
+- uploadedDocumentStatus
+
+Persist only non-sensitive data in localStorage:
+- selected language
+- selected role
+- user profile fields entered by the user
+- chat history
+- task status
+- consent preferences
+
+Never store or ask users to save:
+- passwords
+- OTPs
+- full Aadhaar numbers
+- bank account numbers
+- bank PINs
+- sensitive identity documents
+
+Create one central translation system. Every visible string in every screen must come from the translation dictionary. Do not hard-code English text inside components.
+
+When the user changes language, instantly update:
+- navbar
+- onboarding screens
+- Home tab
+- AI Guide
+- My Next Steps
+- AssistFill
+- Document Vault
+- Consent Centre
+- Service Directory
+- Human Support
+- profile drawer
+- buttons
+- badges
+- placeholders
+- validation messages
+- empty states
+- error messages
+- toasts
+- dropdown options
+- scheme titles
+- scheme descriptions
+- eligibility notes
+- documents
+- deadlines
+- categories
+- support contacts
+
+========================================
+2. LANGUAGES
+========================================
+
+Support these Indian languages with BCP-47 codes:
+
+- English — en-IN
+- Kannada — kn-IN
+- Hindi — hi-IN
+- Tamil — ta-IN
+- Telugu — te-IN
+- Malayalam — ml-IN
+- Marathi — mr-IN
+- Bengali — bn-IN
+- Gujarati — gu-IN
+- Punjabi — pa-IN
+- Odia — or-IN
+- Urdu — ur-IN
+- Assamese — as-IN
+
+The language selector must be visible in the top-right corner during onboarding and in the main navbar.
+
+When a language is selected:
+- Set SpeechRecognition.lang to the selected BCP-47 code.
+- Set every SpeechSynthesisUtterance.lang to the selected BCP-47 code.
+- Send the selected language name and strict script instruction to Gemini.
+- Translate all UI text and all scheme/document/task/support content.
+
+Example: if Kannada is selected, every page must appear in Kannada script, including Service Directory, Document Vault, AssistFill, Consent Centre, Human Support, buttons, and AI replies.
+
+========================================
+3. THEME AND BRANDING
+========================================
+
+Onboarding theme:
+- Deep dark purple/indigo radial gradient background from #120d26 to #1e1640
+- Glassmorphic cards using bg-white/5, border-white/15, and backdrop-blur-xl
+- White text
+- Vibrant purple primary buttons using #6338f9
+
+Main app theme:
+- Soft light lavender/gray gradient background from #f3f1f8 to #e8e4f3
+- Dark slate typography using #1e1b38
+- Glassmorphic white cards using bg-white/70, backdrop-blur-md, and subtle white borders
+
+Navbar:
+- Top-left: purple rounded "N" logo icon + "NIRVAHA AI" + subtitle "From life event to the right action"
+- Do NOT show a "GOVAGENT" badge
+- Do NOT show a "Multilingual" badge
+- Top-right: globe icon language dropdown + user profile pill
+
+Main navigation tabs:
+- Home
+- AI Guide
+- My Next Steps
+- AssistFill
+- Document Vault
+- Consent Centre
+- Service Directory
+- Human Support
+
+Use compact tab styling:
+- text-xs font-medium px-2 py-1 whitespace-nowrap
+- hidden horizontal scrollbar using:
+  [&::-webkit-scrollbar]:hidden
+  [-ms-overflow-style:none]
+  [scrollbar-width:none]
+
+Footer:
+"NIRVAHA AI • Multilingual Public Service Agent • Multi-Device Security Verified"
+
+========================================
+4. ONBOARDING FLOW
+========================================
+
+Implement a 3-step onboarding flow.
+
+STEP 1: LOGIN SCREEN
+- Top pill badge: "CITIZEN SECURE SIGN-IN"
+- Heading: "Access Public Services"
+- Subheading: "Enter your Gmail account or phone number to access personalized welfare guidance."
+- Glassmorphic card with:
+  - One combined input labelled "Email or 10-Digit Phone Number *"
+  - Accept either a valid email format or exactly 10-digit Indian mobile number
+  - Password input labelled "Password *", type="password", required
+  - Checkbox: "Logging in with other / new device?"
+  - If checked, show a 6-digit OTP input
+  - Device status bar: laptop icon + "Detected: Windows PC" on left and pill badge "ID: DEV-86CJ" on right
+- Primary button: "Continue →"
+- Button proceeds to Step 2
+
+STEP 2: ROLE SELECTION SCREEN
+- Top pill badge: "STEP 2: WHO ARE YOU?"
+- Heading: "Select Your Role"
+- Subheading: "We will configure your Citizen Vault & Status Tracker only with suggestions relevant to you."
+- Vertical stack of five role cards:
+  1. Student / College Learner
+  2. Farmer / Agriculturist
+  3. Worker / Daily Wage Earner
+  4. Senior Citizen / Pensioner
+  5. Person with Disability (Divyangjan)
+- Selecting a role must immediately control every later screen.
+
+STEP 3: PROFILE CONFIGURATION SCREEN
+- Top pill badge: "[SELECTED ROLE]: BUILD YOUR OWN PROFILE"
+- Heading: "Configure Your Profile"
+- Subheading: "Enter your custom name and specifics for tailored public welfare delivery."
+- All text inputs must start empty.
+- All dropdowns must start with unselected placeholder "Select...".
+- Fields:
+  - "Your Full Name *" — text input
+  - "State *" — dropdown with all Indian states and union territories
+  - "District" — dropdown dynamically based on selected state
+  - "Category *" — General, OBC, SC, ST, EWS
+  - "Annual Income" — dropdown
+  - "Ration Card" — dropdown
+  - "Gender *" — Male, Female, Transgender / Other, Prefer not to say
+  - "Age / Role Proof Number" — optional text input
+- Security note: "Zero sensitive data stored. Passwords, full Aadhaar, or bank PINs are never saved."
+- Submit button: "Complete Profile →"
+- On submit, navigate to the main app Home tab.
+
+========================================
+5. HOME TAB
+========================================
+
+Hero heading:
+"Tell us what changed in your life. We will help you find the right next steps."
+
+Use compact styling:
+text-xl sm:text-2xl md:text-[28px] font-bold leading-normal tracking-tight max-w-xl mx-auto mb-3
+
+Hero subtitle:
+"Get simple, verified guidance for public services, documents, benefits, deadlines, and support options."
+
+Three action buttons:
+1. "Start with my situation →" — navigates to AI Guide
+2. "Explore services" — navigates to Service Directory
+3. "Document Vault" — navigates to Document Vault
+
+Add role-specific and state-specific quick life-event cards.
+
+Examples:
+- Student: scholarship deadline, hostel support, bus pass, certificate verification
+- Farmer: crop loss, land record linking, KCC, irrigation subsidy
+- Worker: e-Shram card, labour card renewal, health coverage, pension
+- Senior citizen: pension, life certificate, health card, travel concession
+- Person with disability: UDID card, disability pension, assistive devices, health insurance
+
+These cards must be filtered strictly by role, state, and district.
+
+========================================
+6. VOICE INTERACTION
+========================================
+
+On the Home tab, add a large circular purple microphone button labelled:
+"Speak to NIRVAHA AI"
+
+When clicked:
+
+1. Request microphone permission using:
+navigator.mediaDevices.getUserMedia({ audio: true })
+
+2. Show localized status:
+"Requesting Microphone Access... Please click Allow in your browser."
+
+3. If permission is denied, show a localized error and a "Type instead" option.
+
+4. If permission is granted, immediately start Web Speech API SpeechRecognition.
+
+5. Set:
+- recognition.lang = selectedLanguage.bcp47
+- recognition.continuous = false
+- recognition.interimResults = true
+- recognition.maxAlternatives = 1
+
+6. Show live transcript preview:
+"Listening... Speak now"
+
+7. Display interim speech-to-text results in real time.
+
+8. When the user stops speaking and a final transcript is available:
+- Automatically navigate to AI Guide
+- Paste the final transcript into the chat input
+- Automatically send it to Gemini
+- Stream the AI response immediately
+
+9. Provide a "Read aloud" button for every AI response using speechSynthesis.
+
+10. Use the selected language for both speech recognition and text-to-speech.
+
+Handle these cases with localized messages:
+- Microphone permission denied
+- Browser does not support SpeechRecognition
+- No speech detected
+- Network error
+- Recognition error
+
+Do not require the user to press another button after speaking. The final transcript should automatically be sent to the AI.
+
+========================================
+7. AI GUIDE CHATBOT
+========================================
+
+Create an AI Guide chatbot integrated with Gemini using @google/genai.
+
+Use a server-side API route so the Gemini API key is never exposed in frontend code.
+
+Use:
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+Use streaming:
+
+const stream = await ai.models.generateContentStream({
+  model: "gemini-3.8-flash",
+  contents,
+  config: {
+    systemInstruction,
+    temperature: 0.3,
+    maxOutputTokens: 500,
+    thinkingConfig: {
+      thinkingLevel: ThinkingLevel.LOW
+    }
+  }
+});
+
+for await (const chunk of stream) {
+  appendToLastAssistantMessage(chunk.text ?? "");
+}
+
+Fallback model order:
+1. gemini-3.8-flash
+2. gemini-3.5-flash
+3. gemini-2.5-flash
+
+Important:
+- Use generateContentStream, not generateContent.
+- Render each streamed chunk directly into the assistant chat bubble.
+- Do not wait for the full response before displaying text.
+- Show "NIRVAHA AI is thinking..." only until the first chunk arrives.
+- For Gemini 3.x models, use thinkingConfig.thinkingLevel = "LOW".
+- For Gemini 2.5 fallback models, use thinkingConfig.thinkingBudget instead of thinkingLevel.
+- Keep normal responses concise, around 80–180 words.
+- Use bullet points only when the user asks for schemes, documents, deadlines, or steps.
+
+System instruction must include:
+
+"CRITICAL: The active UI language is ${languageName} (${languageCode}). You MUST generate 100% of your answer in ${languageName} using its native script. Never reply in English unless English is selected. If Kannada is selected, write strictly in Kannada script. If Hindi is selected, write strictly in Hindi script."
+
+Also include:
+
+"You are NIRVAHA AI, a warm, empathetic, human-like public service guide for Indian citizens. If the user expresses distress, loneliness, fear, family problems, or says 'I am not fine', respond first like a caring friend. Do not immediately dump welfare schemes. Ask one gentle follow-up question if needed. Recommend schemes, documents, deadlines, or services only when relevant to the user's situation or explicitly requested. Tailor advice strictly to the user's name, role, gender, state, district, category, income, ration card status, and selected language. Never invent scheme names, eligibility rules, deadlines, official URLs, or helpline numbers. If uncertain, tell the user to verify with the official department or nearest Seva Kendra."
+
+Chat suggestion chips:
+- Use role-specific, state-specific, district-specific, and language-specific chips.
+- Translate the "Suggestions" label and chat input placeholder.
+- Never show chips belonging to another role.
+- Chips must be relevant to the user's selected state and district.
+
+========================================
+8. STRICT ROLE + STATE + DISTRICT FILTERING
+========================================
+
+Create one shared data model for all services:
+
+type RoleKey =
+  | "student"
+  | "farmer"
+  | "worker"
+  | "senior"
+  | "disability";
+
+interface LocalizedText {
+  en: string;
+  kn: string;
+  hi: string;
+  ta: string;
+  te: string;
+  ml: string;
+  mr: string;
+  bn: string;
+  gu: string;
+  pa: string;
+  or: string;
+  ur: string;
+  as: string;
+}
+
+interface ServiceItem {
+  id: string;
+  role: RoleKey;
+  states: string[] | "ALL";
+  districts?: string[] | "ALL";
+  category?: string[];
+  incomeLevel?: string[];
+  title: LocalizedText;
+  department: LocalizedText;
+  benefit: LocalizedText;
+  eligibility: LocalizedText;
+  documents: LocalizedText[];
+  deadline?: LocalizedText;
+  tags: LocalizedText[];
+  applyMode: "IN_APP_FORM" | "OFFICIAL_PORTAL";
+  verified: boolean;
+}
+
+Use this exact filtering logic in every feature:
+
+items.filter(item =>
+  item.role === userProfile.role &&
+  (item.states === "ALL" || item.states.includes(userProfile.state)) &&
+  (item.districts === "ALL" || !item.districts || item.districts.includes(userProfile.district))
+);
+
+Apply this same filter to:
+- My Next Steps tasks
+- Service Directory schemes
+- Document Vault documents
+- AssistFill forms
+- Consent Centre requests
+- Human Support contacts
+- AI Guide suggestion chips
+- Home quick-action cards
+
+Never show mixed-role schemes.
+
+Reset custom tasks, selected forms, and chat suggestions whenever role, state, or district changes.
+
+========================================
+9. EXPANDED SCHEME DATABASE
+========================================
+
+Do not limit each role to only five schemes.
+
+Create at least 12–20 relevant items per role.
+
+Include central schemes, state schemes, and Karnataka-specific schemes where applicable.
+
+STUDENT:
+- SSP Post-Matric Scholarship
+- Vidyasiri Scholarship
+- National Scholarship Portal schemes
+- KSRTC student bus pass concession
+- Bonafide certificate
+- Caste certificate
+- Income certificate
+- SC/ST/OBC/EWS scholarship guidance
+- Hostel and food stipend support
+- Education loan guidance
+- Skill development and internship schemes
+- Exam fee reimbursement schemes
+- Minority scholarship schemes
+- State-specific student welfare schemes
+
+FARMER:
+- PM-KISAN e-KYC verification
+- PMFBY crop insurance and crop loss assessment
+- Kisan Credit Card
+- FRUITS Portal and RTC/Pahani land record linking
+- Krishi Bhagya / drip irrigation subsidy
+- Soil Health Card
+- PM-KUSUM solar pump support
+- Agricultural mechanization subsidy
+- Organic and natural farming support
+- Seed and fertilizer subsidy information
+- Animal husbandry and dairy schemes
+- Fisheries support schemes
+- FPO registration guidance
+- Crop loan interest subsidy
+- Karnataka horticulture and sericulture schemes
+
+WORKER:
+- e-Shram UAN registration
+- BOCW construction worker labour card
+- PM-SYM worker pension
+- Ayushman Bharat / ESIC health coverage
+- Building and Other Construction Workers welfare benefits
+- Maternity benefit for women workers
+- Skill development and apprenticeship schemes
+- Workplace injury support guidance
+- Tool-kit and self-employment support
+- State labour welfare board schemes
+- Migrant worker support services
+
+SENIOR CITIZEN:
+- Sandhya Suraksha Yojana
+- Indira Gandhi National Old Age Pension Scheme
+- Jeevan Pramaan digital life certificate
+- Ayushman Vay Vandana 70+ healthcare card
+- Senior citizen bus and rail concession
+- Elder helpline and legal aid
+- Geriatric health check-up camps
+- Old age home and day-care support
+- Widow pension guidance
+- State senior citizen welfare board schemes
+
+PERSON WITH DISABILITY:
+- UDID card registration
+- Disability monthly pension / Mythri / POCH schemes
+- ADIP assistive devices scheme
+- Niramaya health insurance
+- Disability scholarship and education support
+- Employment and skill schemes
+- Accessible housing and barrier-free support
+- Rail and bus concession
+- Legal guardianship and rights guidance
+- Rehabilitation and therapy support
+- State disability welfare board schemes
+- Self-employment and loan support
+
+Mark central schemes as states: "ALL".
+Mark Karnataka-only schemes as states: ["Karnataka"].
+Add district-specific schemes only where relevant.
+
+========================================
+10. SERVICE DIRECTORY TAB
+========================================
+
+Header: localized "Service Directory"
+
+Subtitle:
+"Official benefits, subsidies, and entitlement programs strictly filtered for: [Role], [State], [District]."
+
+Search input placeholder:
+"Search by scheme title, department..."
+
+Category filter pills:
+- Generate category pills dynamically from the filtered schemes.
+- Translate every category name.
+- Do not show categories that have no matching scheme.
+
+Each scheme card must show:
+- Localized scheme title
+- Localized department
+- Localized benefit summary
+- Localized eligibility
+- Required documents
+- Deadline, if available
+- Tags
+- "Check Eligibility →" button
+- "Apply Online" button only when a verified official portal exists
+- Badge: "Central Scheme" or "State Scheme"
+- Badge: "Karnataka" when the scheme is Karnataka-specific
+
+If no scheme matches, show localized empty state:
+"No services currently match your selected role and location."
+
+========================================
+11. DOCUMENT VAULT TAB
+========================================
+
+Show only documents required for the user's role, state, district, category, and selected schemes.
+
+Each document card must include:
+- Localized document name
+- Purpose
+- Issuing authority
+- Status: Not uploaded, Uploaded, Verified, Expiring soon, Expired
+- Required-for schemes
+- Upload button
+- Reminder toggle
+
+Examples:
+- Students should see bonafide, caste, income, scholarship, and admission-related documents.
+- Farmers should see RTC/Pahani, land records, crop details, bank passbook, and KCC-related documents.
+- Workers should see e-Shram, labour card, bank, and health coverage documents.
+- Senior citizens should see pension, life certificate, age proof, and health card documents.
+- Persons with disability should see UDID, disability certificate, pension, and assistive device documents.
+
+Translate all document names, statuses, buttons, and empty states.
+
+========================================
+12. ASSISTFILL TAB
+========================================
+
+AssistFill must complete forms inside the app. It must NOT primarily redirect users to another website.
+
+Create an in-app guided form engine.
+
+Show only forms relevant to the user's role, state, district, and eligibility.
+
+Each form must have these steps:
+
+1. Review auto-filled profile fields
+2. Fill only missing fields
+3. Attach required documents from Document Vault
+4. Review a generated application summary
+5. Save as draft or mark as "Ready to Submit"
+
+Auto-fill from the user's profile:
+- Full name
+- State
+- District
+- Category
+- Gender
+- Annual income band
+- Ration card status
+- Role
+
+Never auto-fill:
+- Aadhaar number
+- Bank account number
+- OTP
+- Password
+- Other sensitive credentials
+
+Provide:
+- Field-level validation
+- Localized helper text
+- Localized buttons
+- Localized progress indicator
+- "Download filled application summary" option
+
+If an official portal is required for final submission, show a clearly labelled final step:
+"Open official portal only after reviewing your saved application."
+
+But the main AssistFill workflow must remain inside NIRVAHA AI.
+
+========================================
+13. CONSENT CENTRE TAB
+========================================
+
+Show only consent requests relevant to the user's role, state, district, category, language, and selected services.
+
+Each consent card must include:
+- Department or scheme name
+- Exact data being requested
+- Purpose
+- Retention period
+- Whether consent is required, optional, or revocable
+- Allow / Deny / Revoke buttons
+
+Translate:
+- Consent titles
+- Data fields
+- Purpose
+- Retention period
+- Buttons
+- Privacy explanation
+
+Add localized privacy text:
+"You control which departments can access your profile information."
+
+Do not show unrelated departmental consent requests.
+
+========================================
+14. HUMAN SUPPORT TAB
+========================================
+
+Human Support must change based on the user's role, state, district, category, language, and selected schemes.
+
+Show only relevant support contacts.
+
+Examples:
+
+Student:
+- Education department
+- Scholarship helpline
+- College grievance cell
+- District social welfare office
+
+Farmer:
+- Taluk agriculture office
+- Horticulture office
+- Crop insurance support
+- FPO contact
+- Krishi helpline
+
+Worker:
+- Labour department
+- BOCW welfare board
+- e-Shram helpdesk
+- ESIC or health support
+- District labour office
+
+Senior citizen:
+- Social welfare office
+- Pension helpdesk
+- Elder helpline
+- District hospital geriatric desk
+
+Person with disability:
+- District Disability Welfare Office
+- UDID helpdesk
+- ADIP support
+- Rehabilitation centre
+- Office of the Commissioner for Persons with Disabilities
+
+Each support card must include:
+- Localized office or helpline name
+- Who it helps
+- When to contact
+- Available language support
+- Location or district coverage
+- "Request callback" button
+- "Prepare my issue summary" button
+
+The "Prepare my issue summary" button must create a localized summary using:
+- User profile
+- Selected role
+- State and district
+- Recent AI Guide conversation
+- Relevant schemes or documents
+
+Do not show generic national helplines unless they are marked as emergency or all-citizen support.
+
+========================================
+15. MY NEXT STEPS TAB
+========================================
+
+Show only tasks for the user's exact role, state, district, and eligibility.
+
+Each task must include:
+- Localized title
+- Why it matters
+- Deadline or recommended timeframe
+- Required documents
+- "Start in AssistFill" button
+- "Ask NIRVAHA AI" button
+- Status: Not started, In progress, Completed
+
+Sort tasks by urgency:
+1. Overdue
+2. Due soon
+3. Upcoming
+4. Optional
+
+Allow users to add custom tasks, but reset custom tasks when role, state, or district changes.
+
+========================================
+16. CORRECTNESS AND SAFETY
+========================================
+
+- Never invent government schemes, deadlines, eligibility rules, official URLs, or helpline numbers.
+- Add a verified boolean field to every scheme and support contact.
+- If information is uncertain, Gemini must say the user should verify with the official department or nearest Seva Kendra.
+- Add a localized disclaimer:
+"NIRVAHA AI provides guidance only. Final eligibility and approval are decided by the concerned government department."
+- AI answers must be grounded in the user profile and the app's scheme database.
+- Do not present unverified schemes as guaranteed entitlements.
+
+========================================
+17. PERFORMANCE REQUIREMENTS
+========================================
+
+- Lazy-load tab components.
+- Use useMemo for filtered schemes, documents, tasks, forms, consent items, and support contacts.
+- Debounce Service Directory search input.
+- Stream Gemini responses token-by-token.
+- Use ThinkingLevel.LOW for Gemini 3.x models.
+- Use thinkingBudget for Gemini 2.5 fallback models.
+- Show skeleton loaders only until the first streamed token arrives.
+- Make the app fully responsive on mobile, tablet, and desktop.
+- Ensure first visible AI response appears quickly instead of after a long delay.
+
+========================================
+18. ACCEPTANCE CHECKLIST
+========================================
+
+The app is complete only when:
+
+- Changing language instantly changes every visible string, icon label, placeholder, badge, button, and page.
+- A Student never sees PM-KISAN, PMFBY, RTC/Pahani, e-Shram, or Old Age Pension.
+- A Farmer never sees student scholarships, e-Shram, or senior citizen pension.
+- A Worker never sees farmer or student schemes.
+- A Senior citizen never sees farmer or student schemes.
+- A Person with disability never sees unrelated role schemes.
+- Selecting Karnataka shows Karnataka-specific schemes.
+- Selecting another state hides Karnataka-only schemes.
+- Selecting a district filters district-specific services where available.
+- Human Support changes with role, state, district, and language.
+- AssistFill fills forms inside the app and does not force users to another website.
+- Voice input requests microphone access, transcribes speech in the selected language, pastes it into the chat box, sends it automatically, and streams a relevant localized response.
+- AI replies begin streaming quickly instead of appearing after a long delay.
+- The AI responds empathetically to emotional messages before suggesting welfare schemes.
+- No sensitive data is stored.

@@ -1,0 +1,6 @@
+{
+  "name": "NIRVAHA AI — Multilingual Public Service Navigation Agent",
+  "description": "Multilingual public service navigation agent for Indian citizens with voice interaction, verified welfare schemes, in-app AssistFill forms, document vault, and role-based guidance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
