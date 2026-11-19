@@ -23,6 +23,16 @@ export const CONSENT_ITEMS: ConsentItem[] = [
     retentionPeriod: createLoc('Valid till academic year end', 'ಶೈಕ್ಷಣಿಕ ವರ್ಷದ ಅಂತ್ಯದವರೆಗೆ', 'सत्र के अंत तक वैध'),
     nature: 'optional',
   },
+  {
+    id: 'consent-student-nsp-all',
+    role: 'student',
+    states: 'ALL',
+    department: createLoc('National Scholarship Portal (NSP / DigiLocker)', 'ರಾಷ್ಟ್ರೀಯ ವಿದ್ಯಾರ್ಥಿವೇತನ ಪೋರ್ಟಲ್ (NSP / ಡಿಜಿಲಾಕರ್)', 'राष्ट्रीय छात्रवृत्ति पोर्टल (NSP / डिजिलॉकर)'),
+    dataRequested: createLoc('Academic Marks Sheet, Institution Verification Code, Bank DBT Token', 'ಅಂಕಪಟ್ಟಿ, ಸಂಸ್ಥೆಯ ಪರಿಶೀಲನಾ ಕೋಡ್, ಬ್ಯಾಂಕ್ ಡಿಬಿಟಿ ಟೋಕನ್', 'अंकतालिका, संस्थान सत्यापन कोड, बैंक डीबीटी टोकन'),
+    purpose: createLoc('Automated verification for Central & State merit/post-matric scholarships across India', 'ಭಾರತದಾದ್ಯಂತ ಕೇಂದ್ರ ಮತ್ತು ರಾಜ್ಯ ವಿದ್ಯಾರ್ಥಿವೇತನಗಳ ಸ್ವಯಂಚಾಲಿತ ಪರಿಶೀಲನೆ', 'भारत भर में केंद्रीय व राज्य छात्रवृत्तियों का स्वचालित सत्यापन'),
+    retentionPeriod: createLoc('Academic Year + 1 year audit cycle', 'ಶೈಕ್ಷಣಿಕ ವರ್ಷ + ೧ ವರ್ಷದ ಲೆಕ್ಕಪರಿಶೋಧನೆ ಅವಧಿ', 'शैक्षणिक सत्र + 1 वर्ष ऑडिट अवधि'),
+    nature: 'required',
+  },
 
   // Farmer
   {
@@ -57,6 +67,16 @@ export const CONSENT_ITEMS: ConsentItem[] = [
     retentionPeriod: createLoc('Active registration term (3 years)', 'ಸಕ್ರಿಯ ನೋಂದಣಿ ಅವಧಿ (೩ ವರ್ಷ)', 'सक्रिय पंजीकरण अवधि (3 वर्ष)'),
     nature: 'required',
   },
+  {
+    id: 'consent-worker-eshram-all',
+    role: 'worker',
+    states: 'ALL',
+    department: createLoc('e-Shram National Database (Ministry of Labour)', 'ಇ-ಶ್ರಮ್ ರಾಷ್ಟ್ರೀಯ ದತ್ತಾಂಶ (ಕಾರ್ಮಿಕ ಸಚಿವಾಲಯ)', 'ई-श्रम राष्ट्रीय डेटाबेस (श्रम मंत्रालय)'),
+    dataRequested: createLoc('Occupation NCO Code, Skill Profile, Bank Account IFSC, Nominee Details', 'ವೃತ್ತಿ ಎನ್‌ಸಿಒ ಕೋಡ್, ಕೌಶಲ್ಯ ವಿವರ, ಬ್ಯಾಂಕ್ ಖಾತೆ IFSC, ವಾರಸುದಾರರ ವಿವರ', 'व्यवसाय एनसीओ कोड, कौशल विवरण, बैंक खाता IFSC, नॉमिनी विवरण'),
+    purpose: createLoc('Issuance of 12-digit UAN card, ₹2 Lakh PMSBY accident cover and social security benefit transfer', '೧೨ ಅಂಕಿಯ ಯುಎಎನ್ ಕಾರ್ಡ್, ₹2 ಲಕ್ಷ ಅಪಘಾತ ವಿಮೆ ಮತ್ತು ಸಾಮಾಜಿಕ ಭದ್ರತಾ ನೆರವು ವರ್ಗಾವಣೆ', '12 अंकों के यूएएन कार्ड, ₹2 लाख दुर्घटना बीमा और सामाजिक सुरक्षा लाभ अंतरण'),
+    retentionPeriod: createLoc('Active worker registry (revocable anytime)', 'ಸಕ್ರಿಯ ಕಾರ್ಮಿಕ ನೋಂದಣಿ (ಯಾವಾಗ ಬೇಕಾದರೂ ಹಿಂಪಡೆಯಬಹುದು)', 'सक्रिय श्रमिक रजिस्ट्री (कभी भी वापस लेने योग्य)'),
+    nature: 'required',
+  },
 
   // Senior
   {
@@ -67,6 +87,16 @@ export const CONSENT_ITEMS: ConsentItem[] = [
     dataRequested: createLoc('Age Certificate, Annual Family Income Declaration, Bank Account', 'ವಯಸ್ಸಿನ ದಾಖಲೆ, ಕುಟುಂಬದ ವಾರ್ಷಿಕ ಆದಾಯ ವಿವರ, ಬ್ಯಾಂಕ್ ಖಾತೆ', 'आयु प्रमाणपत्र, वार्षिक पारिवारिक आय विवरण, बैंक खाता'),
     purpose: createLoc('Monthly statutory electronic transfer of Old Age / Sandhya Suraksha pension', 'ಮಾಸಿಕ ವೃದ್ಧಾಪ್ಯ / ಸಂಧ್ಯಾ ಸುರಕ್ಷಾ ಪಿಂಚಣಿ ನಗದು ವರ್ಗಾವಣೆ', 'मासिक वृद्धावस्था पेंशन का सीधे बैंक में अंतरण'),
     retentionPeriod: createLoc('Lifelong active pension cycle', 'ಜೀವಿತಾವಧಿಯ ಪಿಂಚಣಿ ಅವಧಿ', 'आजीवन पेंशन चक्र'),
+    nature: 'required',
+  },
+  {
+    id: 'consent-senior-nsap-all',
+    role: 'senior',
+    states: 'ALL',
+    department: createLoc('NSAP & Jeevan Pramaan National Pension Portal', 'ಎನ್‌ಎಸ್‌ಎಪಿ ಮತ್ತು ಜೀವನ್ ಪ್ರಮಾಣ್ ರಾಷ್ಟ್ರೀಯ ಪಿಂಚಣಿ ಪೋರ್ಟಲ್', 'एनएसएपी एवं जीवन प्रमाण राष्ट्रीय पेंशन पोर्टल'),
+    dataRequested: createLoc('Statutory Age Proof, Digital Life Certificate Status, Bank DBT Account', 'ವಯಸ್ಸಿನ ದಾಖಲೆ, ಡಿಜಿಟಲ್ ಜೀವನ ಪ್ರಮಾಣಪತ್ರ ಸ್ಥಿತಿ, ಬ್ಯಾಂಕ್ ಡಿಬಿಟಿ ಖಾತೆ', 'आयु प्रमाणपत्र, डिजिटल जीवन प्रमाणपत्र स्थिति, बैंक डीबीटी खाता'),
+    purpose: createLoc('Continuous verification for IGNOAPS national old-age pension and annual life certificate renewal', 'ರಾಷ್ಟ್ರೀಯ ವೃದ್ಧಾಪ್ಯ ಪಿಂಚಣಿ ಮತ್ತು ವಾರ್ಷಿಕ ಜೀವನ ಪ್ರಮಾಣಪತ್ರ ನವೀಕರಣದ ನಿರಂತರ ಪರಿಶೀಲನೆ', 'राष्ट्रीय वृद्धावस्था पेंशन एवं वार्षिक जीवन प्रमाणपत्र नवीनीकरण का निरंतर सत्यापन'),
+    retentionPeriod: createLoc('Active pension disbursement cycle', 'ಸಕ್ರಿಯ ಪಿಂಚಣಿ ವಿತರಣಾ ಅವಧಿ', 'सक्रिय पेंशन वितरण अवधि'),
     nature: 'required',
   },
 

@@ -3,7 +3,43 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import {
+  isGeminiConfigured,
+  generateChatStream,
+  analyzeCitizenProblem,
+  checkSchemeEligibility,
+  SchemeSummaryInput,
+} from './server/services/gemini';
+import {
+  isSarvamConfigured,
+  sarvamTranslate,
+  sarvamTextToSpeech,
+  sarvamSpeechToText,
+} from './server/services/sarvam';
+import {
+  isBhashiniConfigured,
+  bhashiniTranslate,
+  bhashiniSpeechToText,
+} from './server/services/bhashini';
+import {
+  isGoogleMapsConfigured,
+  findNearbyGovOffices,
+  computeDirections,
+} from './server/services/maps';
+import {
+  isSupabaseConfigured,
+  signUpCitizen,
+  signInCitizen,
+  getAuthenticatedUser,
+  getUserProfile,
+  upsertUserProfile,
+  getChatHistory,
+  appendChatMessage,
+  clearUserChatHistory,
+  fetchSchemesFromDb,
+  seedSchemesToDb,
+} from './server/services/supabase';
+import { SCHEMES_DATABASE } from './src/data/schemes';
 
 dotenv.config();
 
@@ -13,125 +49,565 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-app.use(express.json({ limit: '5mb' }));
+// Support audio base64 payloads for Sarvam AI and Bhashini STT
+app.use(express.json({ limit: '15mb' }));
 
-// Server-side Gemini initialization
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
+function notConfigured(res: Response, provider: string, requiredEnvVars: string[]) {
+  return res.status(503).json({
+    code: 'API_KEY_NOT_CONFIGURED',
+    provider,
+    requiredEnvVars,
+    error: `${provider} is not configured on the server. Set ${requiredEnvVars.join(', ')} in backend environment secrets.`,
+  });
+}
+
+function extractBearerToken(req: Request): string | null {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) return null;
+  const token = header.slice(7).trim();
+  return token || null;
+}
+
+function getRelevantSchemesForProfile(userProfile?: {
+  role?: string;
+  state?: string;
+  district?: string;
+}): SchemeSummaryInput[] {
+  const role = userProfile?.role;
+  const state = userProfile?.state;
+  const district = userProfile?.district;
+
+  const matched = SCHEMES_DATABASE.filter((item) => {
+    if (role && item.role !== role) return false;
+    const stateMatch = item.states === 'ALL' || !state || item.states.includes(state);
+    if (!stateMatch) return false;
+    const districtMatch =
+      item.districts === 'ALL' || !item.districts || !district || item.districts.includes(district);
+    return districtMatch;
+  });
+
+  const pool = matched.length > 0 ? matched : SCHEMES_DATABASE.slice(0, 12);
+  return pool.map((s) => ({
+    id: s.id,
+    title: s.title.en,
+    department: s.department.en,
+    benefit: s.benefit.en,
+    eligibility: s.eligibility.en,
+    documents: s.documents.map((d) => d.en),
+    officialPortalUrl: s.officialPortalUrl,
+  }));
+}
+
+// ============================================================================
+// Integration Availability Check (Booleans only — NEVER exposes keys)
+// ============================================================================
+app.get('/api/integrations/status', (_req: Request, res: Response) => {
+  res.json({
+    gemini: isGeminiConfigured(),
+    sarvam: isSarvamConfigured(),
+    supabase: isSupabaseConfigured(),
+    googleMaps: isGoogleMapsConfigured(),
+    bhashini: isBhashiniConfigured(),
+  });
 });
 
-// Fast localized fallback templates for all 13 languages
-const LOCALIZED_FALLBACKS: Record<string, string> = {
-  kn: 'ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ನಿರ್ವಾಹ AI ಸಾರ್ವಜನಿಕ ಸೇವಾ ಸಹಾಯಕ. ನಿಮ್ಮ ಪ್ರೊಫೈಲ್ ಮತ್ತು ವಿವರಗಳ ಆಧಾರದ ಮೇಲೆ ನೀವು ಸಂಬಂಧಿಸಿದ ಯೋಜನೆಗಳಿಗೆ ಅರ್ಹರಾಗಿದ್ದೀರಿ. ನಮ್ಮ ಸೇವಾ ಡೈರೆಕ್ಟರಿ ಮತ್ತು ಅಸಿಸ್ಟ್‌ಫಿಲ್ ಮೂಲಕ ನೀವು ಯಾವುದೇ ಕಚೇರಿಗೆ ಹೋಗದೆ ನೇರವಾಗಿ ಆ್ಯಪ್‌ನಲ್ಲೇ ಅರ್ಜಿ ಸಲ್ಲಿಸಬಹುದು. ನಿಮಗೆ ಯಾವ ಯೋಜನೆ ಅಥವಾ ದಾಖಲೆಯ ಬಗ್ಗೆ ಮಾಹಿತಿ ಬೇಕು?',
-  hi: 'नमस्ते! मैं आपका निर्वाह AI लोक सेवा साथी हूं। आपकी प्रोफ़ाइल और स्थान के अनुसार आप कई कल्याणकारी योजनाओं के पात्र हैं। आप सर्विस डायरेक्टरी और असिस्टफिल के माध्यम से सीधे इसी ऐप में आवेदन कर सकते हैं। आपको किस योजना या दस्तावेज़ के बारे में जानकारी चाहिए?',
-  en: 'Hello! I am your NIRVAHA AI public service guide. Based on your citizen profile and location, you have verified welfare schemes available. You can review them in the Service Directory or apply directly inside the app using AssistFill without visiting an external portal. How can I help you today?',
-  ta: 'வணக்கம்! நான் உங்கள் நிர்வாஹா AI பொது சேவை வழிகாட்டி. உங்கள் விவரக்குறிப்புக்கு ஏற்ப நீங்கள் பல நலத்திட்டங்களுக்கு தகுதியுடையவர். நீங்கள் சேவை அடைவில் திட்டங்களை பார்க்கலாம் அல்லது அசிஸ்ட்பில் மூலம் நேரடியாக விண்ணப்பிக்கலாம். உங்களுக்கு என்ன உதவி தேவை?',
-  te: 'నమస్కారం! నేను మీ నిర్వాహ AI ప్రజా సేవా మార్గదర్శిని. మీ ప్రొఫైల్ ఆధారంగా మీరు అర్హులైన సంక్షేమ పథకాలు సిద్ధంగా ఉన్నాయి. మీరు సేవా డైరెక్టరీలో చూడవచ్చు లేదా అసిస్ట్‌ఫిల్ ద్వారా నేరుగా దరఖాస్తు చేసుకోవచ్చు. మీకు ఏ సమాచారం కావాలి?',
-  ml: 'നമസ്കാരം! ഞാൻ നിങ്ങളുടെ നിർവാഹ AI പബ്ലിക് സർവീസ് സഹായിയാണ്. നിങ്ങളുടെ പ്രൊഫൈൽ അടിസ്ഥാനമാക്കി നിങ്ങൾ അർഹരായ ക്ഷേമപദ്ധതികൾ ലഭ്യമാണ്. സർവീസ് ഡയറക്ടറിയിലോ അസിസ്റ്റ്ഫിൽ വഴിയോ നിങ്ങൾക്ക് അപേക്ഷിക്കാം. എന്ത് സഹായമാണ് വേണ്ടത്?',
-  mr: 'नमस्कार! मी तुमचा निर्वाह AI लोकसेवा मार्गदर्शक आहे. तुमच्या प्रोफाईलनुसार आपण अनेक कल्याणकारी योजनांसाठी पात्र आहात. आपण थेट असिस्टफिलद्वारे ॲपमध्येच अर्ज करू शकता. आपल्याला कोणत्या योजनेची माहिती हवी आहे?',
-  bn: 'নমস্কার! আমি আপনার নির্বাহ AI জনসেবা সহায়ক। আপনার প্রোফাইল অনুযায়ী একাধিক জনকল্যাণমূলক প্রকল্প উপলব্ধ রয়েছে। আপনি অ্যাসিস্টফিলের মাধ্যমে সরাসরি এই অ্যাপেই আবেদন করতে পারেন। আপনার কী সাহায্য প্রয়োজন?',
-  gu: 'નમસ્તે! હું તમારો નિર્વાહ AI જાહેર સેવા સહાયક છું. તમારી પ્રોફાઇલ મુજબ તમે કલ્યાણકારી યોજનાઓ માટે પાત્ર છો. તમે આસિસ્ટફિલ દ્વારા સીધી આ એપમાં અરજી કરી શકો છો. તમને કઈ યોજના વિશે માહિતી જોઈએ છે?',
-  pa: 'ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ਤੁਹਾਡਾ ਨਿਰਵਾਹ AI ਲੋਕ ਸੇਵਾ ਸਹਾਇਕ ਹਾਂ। ਤੁਹਾਡੀ ਪ੍ਰੋਫਾਈਲ ਅਨੁਸਾਰ ਤੁਸੀਂ ਕਈ ਭਲਾਈ ਸਕੀਮਾਂ ਦੇ ਯੋਗ ਹੋ। ਤੁਸੀਂ ਅਸਿਸਟਫਿਲ ਰਾਹੀਂ ਸਿੱਧਾ ਇਸੇ ਐਪ ਵਿੱਚ ਅਰਜ਼ੀ ਦੇ ਸਕਦੇ ਹੋ। ਤੁਹਾਨੂੰ ਕੀ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ?',
-  or: 'ନମସ୍କାର! ମୁଁ ଆପଣଙ୍କ ନିର୍ବାହ AI ଲୋକସେବା ସହାୟକ। ଆପଣଙ୍କ ପ୍ରୋଫାଇଲ୍ ଅନୁଯାୟୀ ଆପଣ ବହୁ କଲ୍ୟାଣକାରୀ ଯୋଜନା ପାଇଁ ଯୋଗ୍ୟ। ଆପଣ ଆସିଷ୍ଟଫିଲ୍ ମାଧ୍ୟମରେ ସିଧାସଳଖ ଆବେଦନ କରିପାରିବେ। ଆପଣଙ୍କୁ କେଉଁ ସୂଚନା ଦରକାର?',
-  ur: 'سلام! میں آپ کا نرباہا AI عوامی خدمت کا رہنما ہوں۔ آپ کے پروفائل کے مطابق آپ کئی فلاحی اسکیموں کے اہل ہیں۔ آپ اسسٹ فل کے ذریعے براہ راست اسی ایپ میں درخواست جمع کر سکتے ہیں۔ آپ کو کس اسکیم کے بارے میں معلومات چاہیے؟',
-  as: 'নমস্কাৰ! মই আপোনাৰ নিৰ্বাহ AI ৰাজহুৱা সেৱা সহায়ক। আপোনাৰ প্ৰ’ফাইল অনুসৰি আপুনি কেইবাখনো কল্যাণমূলক আঁচনিৰ বাবে যোগ্য। আপুনি এচিষ্টফিলৰ জৰিয়তে পোনপটীয়াকৈ এই এপত আবেদন কৰিব পাৰে। আপোনাক কি তথ্য লাগে?',
-};
-
-// Ultra-Fast Streaming Chat API endpoint
+// ============================================================================
+// 1. GEMINI API — Streaming Chat, Problem Analysis & Eligibility Checking
+// ============================================================================
 app.post('/api/chat', async (req: Request, res: Response) => {
   const { messages, userProfile, language } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Invalid messages array' });
+    return res.status(400).json({ error: 'Invalid messages array.' });
   }
 
-  const languageName = language?.name || 'English';
-  const languageCode = language?.code || 'en';
-  const nativeName = language?.nativeName || 'English';
-
-  const systemInstruction = `You are NIRVAHA AI, an ultra-fast, caring, verified public welfare advisor for Indian citizens.
-MANDATORY: You MUST reply 100% in ${languageName} (${languageCode}, script: ${nativeName}). NEVER output English unless language is explicitly English.
-Answer format: Be direct, concise, and helpful (50–90 words). Provide immediate guidance on eligible schemes, documents required, and tell them they can apply directly via AssistFill in this app.
-Citizen Profile: Name: ${userProfile?.fullName || 'Citizen'}, Role: ${userProfile?.role || 'Citizen'}, State: ${userProfile?.state || 'India'}, District: ${userProfile?.district || 'Unspecified'}, Income: ${userProfile?.annualIncome || 'Unspecified'}.`;
-
-  // Use only the last 3 messages to minimize input token processing latency
-  const recentMessages = messages.slice(-3);
-  const contents = recentMessages.map((m: { sender: string; text: string }) => ({
-    role: m.sender === 'user' ? 'user' : 'model',
-    parts: [{ text: m.text }],
-  }));
-
-  // Disable buffering for instant token streaming
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 
-  // Optimized model fallback chain: fastest lightweight models first
-  const modelsToTry = [
-    { name: 'gemini-3.1-flash-lite', is3x: true },
-    { name: 'gemini-flash-latest', is3x: false },
-    { name: 'gemini-3.8-flash', is3x: true },
-    { name: 'gemini-2.5-flash', is3x: false },
-  ];
+  if (!isGeminiConfigured()) {
+    res.write(
+      `data: ${JSON.stringify({
+        error: 'Gemini API key is not configured on the server. Set GEMINI_API_KEY in backend secrets.',
+      })}\n\n`
+    );
+    res.write(`data: [DONE]\n\n`);
+    res.end();
+    return;
+  }
 
-  let streamSuccess = false;
+  try {
+    const relevantSchemes = getRelevantSchemesForProfile(userProfile);
+    const { stream } = await generateChatStream({
+      messages,
+      userProfile,
+      language,
+      relevantSchemes,
+    });
 
-  for (const modelInfo of modelsToTry) {
-    try {
-      const config: any = {
-        systemInstruction,
-        temperature: 0.2,
-        maxOutputTokens: 280,
-      };
-
-      // Disable thinking overhead completely for instant responses
-      if (modelInfo.is3x) {
-        config.thinkingConfig = {
-          thinkingLevel: ThinkingLevel.MINIMAL,
-        };
-      } else {
-        config.thinkingConfig = {
-          thinkingBudget: 0,
-        };
+    for await (const chunk of stream) {
+      if (res.writableEnded) break;
+      const text = chunk.text || '';
+      if (text) {
+        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+        (res as any).flush?.();
       }
+    }
 
-      const stream = await ai.models.generateContentStream({
-        model: modelInfo.name,
-        contents,
-        config,
-      });
-
-      for await (const chunk of stream) {
-        const text = chunk.text || '';
-        if (text) {
-          res.write(`data: ${JSON.stringify({ text })}\n\n`);
-          (res as any).flush?.();
-        }
-      }
-
+    if (!res.writableEnded) {
       res.write(`data: [DONE]\n\n`);
       (res as any).flush?.();
       res.end();
-      streamSuccess = true;
-      break;
-    } catch (err: any) {
-      console.warn(`Model ${modelInfo.name} speed fallback notice:`, err?.message || err);
-      // Try next model immediately
+    }
+  } catch (err: any) {
+    const errMsg = err?.message || 'Unable to reach Gemini API.';
+    console.warn('Gemini chat stream failed:', errMsg);
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
+      res.write(`data: [DONE]\n\n`);
+      res.end();
     }
   }
+});
 
-  if (!streamSuccess) {
-    const fallbackText = LOCALIZED_FALLBACKS[languageCode] || LOCALIZED_FALLBACKS.en;
-    res.write(`data: ${JSON.stringify({ text: fallbackText })}\n\n`);
-    res.write(`data: [DONE]\n\n`);
-    res.end();
+app.post('/api/gemini/analyze', async (req: Request, res: Response) => {
+  if (!isGeminiConfigured()) {
+    return notConfigured(res, 'Gemini API', ['GEMINI_API_KEY']);
+  }
+
+  const { problemText, userProfile, language } = req.body;
+  if (!problemText || typeof problemText !== 'string' || !problemText.trim()) {
+    return res.status(400).json({ error: 'problemText is required.' });
+  }
+
+  try {
+    const candidateSchemes = getRelevantSchemesForProfile(userProfile);
+    const analysis = await analyzeCitizenProblem({
+      problemText: problemText.trim(),
+      userProfile,
+      language,
+      candidateSchemes,
+    });
+    res.json(analysis);
+  } catch (err: any) {
+    console.error('Gemini analyze error:', err);
+    res.status(502).json({ error: err?.message || 'Gemini problem analysis failed.' });
+  }
+});
+
+app.post('/api/gemini/eligibility', async (req: Request, res: Response) => {
+  if (!isGeminiConfigured()) {
+    return notConfigured(res, 'Gemini API', ['GEMINI_API_KEY']);
+  }
+
+  const { scheme, userProfile, language } = req.body;
+  if (!scheme || !scheme.title) {
+    return res.status(400).json({ error: 'scheme object with title is required.' });
+  }
+
+  try {
+    const result = await checkSchemeEligibility({
+      scheme,
+      userProfile,
+      language,
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('Gemini eligibility error:', err);
+    res.status(502).json({ error: err?.message || 'Gemini eligibility check failed.' });
+  }
+});
+
+// ============================================================================
+// 2. SARVAM AI — Indian Languages STT, TTS & Translation
+// ============================================================================
+app.post('/api/sarvam/translate', async (req: Request, res: Response) => {
+  if (!isSarvamConfigured()) {
+    return notConfigured(res, 'Sarvam AI', ['SARVAM_API_KEY']);
+  }
+
+  const { text, sourceLanguage, targetLanguage } = req.body;
+  if (!text || !targetLanguage) {
+    return res.status(400).json({ error: 'text and targetLanguage are required.' });
+  }
+
+  try {
+    const result = await sarvamTranslate({ text, sourceLanguage, targetLanguage });
+    res.json(result);
+  } catch (err: any) {
+    console.error('Sarvam translate error:', err);
+    res.status(502).json({ error: err?.message || 'Sarvam translation failed.' });
+  }
+});
+
+app.post('/api/sarvam/tts', async (req: Request, res: Response) => {
+  if (!isSarvamConfigured()) {
+    return notConfigured(res, 'Sarvam AI', ['SARVAM_API_KEY']);
+  }
+
+  const { text, languageCode, speaker } = req.body;
+  if (!text || !languageCode) {
+    return res.status(400).json({ error: 'text and languageCode are required.' });
+  }
+
+  try {
+    const result = await sarvamTextToSpeech({ text, languageCode, speaker });
+    res.json(result);
+  } catch (err: any) {
+    console.error('Sarvam TTS error:', err);
+    res.status(502).json({ error: err?.message || 'Sarvam text-to-speech failed.' });
+  }
+});
+
+app.post('/api/sarvam/stt', async (req: Request, res: Response) => {
+  if (!isSarvamConfigured()) {
+    return notConfigured(res, 'Sarvam AI', ['SARVAM_API_KEY']);
+  }
+
+  const { audioBase64, mimeType, languageCode } = req.body;
+  if (!audioBase64) {
+    return res.status(400).json({ error: 'audioBase64 is required.' });
+  }
+
+  try {
+    const result = await sarvamSpeechToText({ audioBase64, mimeType, languageCode });
+    res.json(result);
+  } catch (err: any) {
+    console.error('Sarvam STT error:', err);
+    res.status(502).json({ error: err?.message || 'Sarvam speech-to-text failed.' });
+  }
+});
+
+// ============================================================================
+// 3. BHASHINI (ULCA / Dhruva) — Indian Language ASR & Translation
+// ============================================================================
+app.post('/api/bhashini/translate', async (req: Request, res: Response) => {
+  if (!isBhashiniConfigured()) {
+    return notConfigured(res, 'Bhashini', ['BHASHINI_API_KEY']);
+  }
+
+  const { text, sourceLanguage, targetLanguage } = req.body;
+  if (!text || !sourceLanguage || !targetLanguage) {
+    return res.status(400).json({ error: 'text, sourceLanguage, and targetLanguage are required.' });
+  }
+
+  try {
+    const result = await bhashiniTranslate({ text, sourceLanguage, targetLanguage });
+    res.json(result);
+  } catch (err: any) {
+    console.error('Bhashini translate error:', err);
+    res.status(502).json({ error: err?.message || 'Bhashini translation failed.' });
+  }
+});
+
+app.post('/api/bhashini/stt', async (req: Request, res: Response) => {
+  if (!isBhashiniConfigured()) {
+    return notConfigured(res, 'Bhashini', ['BHASHINI_API_KEY']);
+  }
+
+  const { audioBase64, sourceLanguage, audioFormat } = req.body;
+  if (!audioBase64 || !sourceLanguage) {
+    return res.status(400).json({ error: 'audioBase64 and sourceLanguage are required.' });
+  }
+
+  try {
+    const result = await bhashiniSpeechToText({ audioBase64, sourceLanguage, audioFormat });
+    res.json(result);
+  } catch (err: any) {
+    console.error('Bhashini ASR error:', err);
+    res.status(502).json({ error: err?.message || 'Bhashini speech recognition failed.' });
+  }
+});
+
+// ============================================================================
+// 4. GOOGLE MAPS PLATFORM — Nearby Government Offices & Directions
+// ============================================================================
+app.post('/api/maps/nearby-offices', async (req: Request, res: Response) => {
+  if (!isGoogleMapsConfigured()) {
+    return notConfigured(res, 'Google Maps Platform', ['GOOGLE_MAPS_API_KEY']);
+  }
+
+  const { query, state, district, lat, lng, radiusMeters, languageCode } = req.body;
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return res.status(400).json({ error: 'Search query (e.g., Taluk Office, CSC) is required.' });
+  }
+
+  try {
+    const result = await findNearbyGovOffices({
+      query: query.trim(),
+      state,
+      district,
+      lat: typeof lat === 'number' ? lat : undefined,
+      lng: typeof lng === 'number' ? lng : undefined,
+      radiusMeters: typeof radiusMeters === 'number' ? radiusMeters : undefined,
+      languageCode,
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('Google Maps nearby-offices error:', err);
+    res.status(502).json({ error: err?.message || 'Failed to search nearby government offices.' });
+  }
+});
+
+app.post('/api/maps/directions', async (req: Request, res: Response) => {
+  if (!isGoogleMapsConfigured()) {
+    return notConfigured(res, 'Google Maps Platform', ['GOOGLE_MAPS_API_KEY']);
+  }
+
+  const {
+    originLat,
+    originLng,
+    originAddress,
+    destinationLat,
+    destinationLng,
+    destinationPlaceId,
+    destinationAddress,
+    travelMode,
+    languageCode,
+  } = req.body;
+
+  try {
+    const result = await computeDirections({
+      originLat: typeof originLat === 'number' ? originLat : undefined,
+      originLng: typeof originLng === 'number' ? originLng : undefined,
+      originAddress,
+      destinationLat: typeof destinationLat === 'number' ? destinationLat : undefined,
+      destinationLng: typeof destinationLng === 'number' ? destinationLng : undefined,
+      destinationPlaceId,
+      destinationAddress,
+      travelMode,
+      languageCode,
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('Google Maps directions error:', err);
+    res.status(502).json({ error: err?.message || 'Failed to compute directions.' });
+  }
+});
+
+// ============================================================================
+// 5. SUPABASE — Auth, Citizen Profiles, Chat History & Schemes Database
+// ============================================================================
+app.post('/api/auth/signup', async (req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  const { email, password, fullName } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'email and password are required.' });
+  }
+
+  try {
+    const result = await signUpCitizen({ email, password, fullName });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Sign-up failed.' });
+  }
+});
+
+app.post('/api/auth/signin', async (req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'email and password are required.' });
+  }
+
+  try {
+    const result = await signInCitizen({ email, password });
+    res.json(result);
+  } catch (err: any) {
+    res.status(401).json({ error: err?.message || 'Invalid email or password.' });
+  }
+});
+
+app.get('/api/auth/me', async (req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  const token = extractBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: 'Missing Authorization Bearer token.' });
+  }
+
+  try {
+    const user = await getAuthenticatedUser(token);
+    res.json({ user });
+  } catch (err: any) {
+    res.status(401).json({ error: err?.message || 'Unauthorized.' });
+  }
+});
+
+app.get('/api/profile', async (req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  const token = extractBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: 'Missing Authorization Bearer token.' });
+  }
+
+  try {
+    const user = await getAuthenticatedUser(token);
+    const profile = await getUserProfile(user.id, token);
+    res.json({ profile });
+  } catch (err: any) {
+    res.status(401).json({ error: err?.message || 'Failed to load profile.' });
+  }
+});
+
+app.put('/api/profile', async (req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  const token = extractBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: 'Missing Authorization Bearer token.' });
+  }
+
+  try {
+    const user = await getAuthenticatedUser(token);
+    const saved = await upsertUserProfile(user.id, req.body || {}, token);
+    res.json({ profile: saved });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to save profile.' });
+  }
+});
+
+app.get('/api/chat/history', async (req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  const token = extractBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: 'Missing Authorization Bearer token.' });
+  }
+
+  try {
+    const user = await getAuthenticatedUser(token);
+    const messages = await getChatHistory(user.id, token);
+    res.json({ messages });
+  } catch (err: any) {
+    res.status(401).json({ error: err?.message || 'Failed to load chat history.' });
+  }
+});
+
+app.post('/api/chat/history', async (req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  const token = extractBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: 'Missing Authorization Bearer token.' });
+  }
+
+  const { id, sender, text, isVoice, languageCode } = req.body;
+  if (!id || !sender || typeof text !== 'string') {
+    return res.status(400).json({ error: 'id, sender, and text are required.' });
+  }
+
+  try {
+    const user = await getAuthenticatedUser(token);
+    await appendChatMessage(user.id, { id, sender, text, isVoice, languageCode }, token);
+    res.json({ saved: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to save chat message.' });
+  }
+});
+
+app.delete('/api/chat/history', async (req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  const token = extractBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: 'Missing Authorization Bearer token.' });
+  }
+
+  try {
+    const user = await getAuthenticatedUser(token);
+    await clearUserChatHistory(user.id, token);
+    res.json({ cleared: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to clear chat history.' });
+  }
+});
+
+app.get('/api/schemes', async (req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  const role = typeof req.query.role === 'string' ? req.query.role : undefined;
+  try {
+    const schemes = await fetchSchemesFromDb({ role });
+    res.json({ source: 'supabase', count: schemes.length, schemes });
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || 'Failed to fetch schemes from Supabase.' });
+  }
+});
+
+app.post('/api/schemes/seed', async (_req: Request, res: Response) => {
+  if (!isSupabaseConfigured()) {
+    return notConfigured(res, 'Supabase', [
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ]);
+  }
+
+  try {
+    const result = await seedSchemesToDb(SCHEMES_DATABASE as any);
+    res.json(result);
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || 'Failed to seed schemes into Supabase.' });
   }
 });
 

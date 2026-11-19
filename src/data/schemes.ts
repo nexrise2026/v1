@@ -194,6 +194,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://scholarships.gov.in',
   },
   {
     id: 'minority-merit-scholarship',
@@ -306,6 +307,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'OFFICIAL_PORTAL',
     verified: true,
+    officialPortalUrl: 'https://scholarships.gov.in',
   },
   {
     id: 'bonafide-issuance-portal',
@@ -342,6 +344,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://services.india.gov.in',
   },
   {
     id: 'karnataka-caste-income-rd',
@@ -416,6 +419,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://dce.karnataka.gov.in',
   },
   {
     id: 'national-apprenticeship-nats',
@@ -609,6 +613,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://www.jansamarth.in',
   },
   {
     id: 'krishi-bhagya-drip-subsidy',
@@ -646,6 +651,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://raitamitra.karnataka.gov.in',
   },
   {
     id: 'pm-kusum-solar-pump',
@@ -683,6 +689,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://pmkusum.mnre.gov.in',
   },
   {
     id: 'soil-health-card-scheme',
@@ -756,6 +763,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://raitamitra.karnataka.gov.in',
   },
   {
     id: 'agricultural-mechanization-subsidies',
@@ -830,6 +838,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://www.jansamarth.in',
   },
   {
     id: 'paramparagat-krishi-vikas-pkvy',
@@ -866,6 +875,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'OFFICIAL_PORTAL',
     verified: true,
+    officialPortalUrl: 'https://pgsindia-ncof.gov.in',
   },
   {
     id: 'pm-matsya-sampada-fisheries',
@@ -902,6 +912,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'OFFICIAL_PORTAL',
     verified: true,
+    officialPortalUrl: 'https://pmmsy.dof.gov.in',
   },
 
   // ==========================================
@@ -1092,6 +1103,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://karbocwwb.karnataka.gov.in',
   },
   {
     id: 'pm-svanidhi-street-vendor',
@@ -1167,6 +1179,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://pmmvy.wcd.gov.in',
   },
 
   // ==========================================
@@ -1247,6 +1260,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://nsap.nic.in',
   },
   {
     id: 'jeevan-pramaan-digital-life-certificate',
@@ -1356,6 +1370,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://sevasindhu.karnataka.gov.in',
   },
   {
     id: 'senior-citizen-id-card-issuance',
@@ -1394,6 +1409,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://services.india.gov.in',
   },
 
   // ==========================================
@@ -1511,6 +1527,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://depwd.gov.in',
   },
   {
     id: 'niramaya-health-insurance-national-trust',
@@ -1586,6 +1603,7 @@ export const SCHEMES_DATABASE: ServiceItem[] = [
     ],
     applyMode: 'IN_APP_FORM',
     verified: true,
+    officialPortalUrl: 'https://divyangjanid.indianrail.gov.in',
   },
   {
     id: 'karnataka-disability-free-bus-pass',

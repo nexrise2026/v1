@@ -115,10 +115,18 @@ export const HomeTab: React.FC = () => {
     }
 
     const finalText = (textToPaste || transcriptRef.current || interimTranscript).trim();
+    // Clear refs before stopping recognition so onend cannot trigger a duplicate paste
+    transcriptRef.current = '';
+    setInterimTranscript('');
 
     if (recognitionRef.current) {
+      const rec = recognitionRef.current;
+      recognitionRef.current = null;
+      rec.onend = null;
+      rec.onresult = null;
+      rec.onerror = null;
       try {
-        recognitionRef.current.stop();
+        rec.stop();
       } catch (e) {}
     }
 
@@ -139,16 +147,21 @@ export const HomeTab: React.FC = () => {
       clearTimeout(autoSendTimerRef.current);
       autoSendTimerRef.current = null;
     }
+    transcriptRef.current = '';
     if (recognitionRef.current) {
+      const rec = recognitionRef.current;
+      recognitionRef.current = null;
+      rec.onend = null;
+      rec.onresult = null;
+      rec.onerror = null;
       try {
-        recognitionRef.current.abort();
+        rec.abort();
       } catch (e) {}
     }
     setIsVoiceActive(false);
     setRecordingState('idle');
     setVoiceStatus('');
     setInterimTranscript('');
-    transcriptRef.current = '';
   };
 
   // Voice Interaction Trigger with direct Speech-to-Text conversion

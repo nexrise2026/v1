@@ -62,6 +62,65 @@ export const ASSIST_FILL_FORMS: AssistFillFormConfig[] = [
       },
     ],
   },
+  {
+    id: 'form-nsp-central-scholarship',
+    role: 'student',
+    states: 'ALL',
+    title: createLoc(
+      'National Scholarship Portal (NSP) Central Sector Scholarship Form',
+      'ರಾಷ್ಟ್ರೀಯ ವಿದ್ಯಾರ್ಥಿವೇತನ ಪೋರ್ಟಲ್ (NSP) ಕೇಂದ್ರ ವಲಯದ ವಿದ್ಯಾರ್ಥಿವೇತನ ಅರ್ಜಿ',
+      'राष्ट्रीय छात्रवृत्ति पोर्टल (NSP) केंद्रीय क्षेत्र छात्रवृत्ति आवेदन'
+    ),
+    department: createLoc(
+      'Ministry of Education, Government of India',
+      'ಶಿಕ್ಷಣ ಸಚಿವಾಲಯ, ಭಾರತ ಸರ್ಕಾರ',
+      'शिक्षा मंत्रालय, भारत सरकार'
+    ),
+    description: createLoc(
+      'All-India guided filing for Central Sector & Post-Matric scholarships with direct DBT transfer to student bank accounts.',
+      'ವಿದ್ಯಾರ್ಥಿಗಳ ಬ್ಯಾಂಕ್ ಖಾತೆಗೆ ನೇರ ಡಿಬಿಟಿ ವರ್ಗಾವಣೆಗಾಗಿ ಅಖಿಲ ಭಾರತ ಕೇಂದ್ರ ವಲಯದ ವಿದ್ಯಾರ್ಥಿವೇತನ ಅರ್ಜಿ.',
+      'छात्रों के बैंक खाते में सीधे डीबीटी हस्तांतरण हेतु अखिल भारतीय केंद्रीय छात्रवृत्ति आवेदन।'
+    ),
+    requiredDocs: [
+      createLoc('Institution Bonafide & Admission Certificate', 'ಸಂಸ್ಥೆಯ ಬೋನಾಫೈಡ್ ಮತ್ತು ಪ್ರವೇಶ ಪ್ರಮಾಣಪತ್ರ', 'संस्थान बोनाफाइड एवं प्रवेश प्रमाणपत्र'),
+      createLoc('Family Income Certificate', 'ಕುಟುಂಬದ ಆದಾಯ ಪ್ರಮಾಣಪತ್ರ', 'पारिवारिक आय प्रमाणपत्र'),
+      createLoc('Previous Year Marks Sheet', 'ಹಿಂದಿನ ವರ್ಷದ ಅಂಕಪಟ್ಟಿ', 'पिछले वर्ष की अंकतालिका'),
+    ],
+    portalUrl: 'https://scholarships.gov.in',
+    formSpecificFields: [
+      {
+        id: 'universityRollNo',
+        label: createLoc('College / AISHE Enrollment Number', 'ಕಾಲೇಜು / ಎಐಎಸ್‌ಎಚ್‌ಇ ನೋಂದಣಿ ಸಂಖ್ಯೆ', 'कॉलेज / एआईएसएचई नामांकन संख्या'),
+        type: 'text',
+        required: true,
+        placeholder: createLoc('e.g. NSP2026CS104', 'ಉದಾ. NSP2026CS104', 'उदा. NSP2026CS104'),
+        helperText: createLoc('Enter your institution roll or registration number', 'ನಿಮ್ಮ ಸಂಸ್ಥೆಯ ನೋಂದಣಿ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ', 'अपने संस्थान का रोल या पंजीकरण नंबर दर्ज करें'),
+      },
+      {
+        id: 'courseYear',
+        label: createLoc('Current Year of Study', 'ಪ್ರಸ್ತುತ ಅಧ್ಯಯನ ಮಾಡುತ್ತಿರುವ ವರ್ಷ', 'वर्तमान अध्ययन वर्ष'),
+        type: 'select',
+        required: true,
+        options: [
+          createLoc('1st Year', '೧ನೇ ವರ್ಷ', 'प्रथम वर्ष'),
+          createLoc('2nd Year', '೨ನೇ ವರ್ಷ', 'द्वितीय वर्ष'),
+          createLoc('3rd Year', '೩ನೇ ವರ್ಷ', 'तृतीय वर्ष'),
+          createLoc('4th Year / Final', '೪ನೇ ವರ್ಷ / ಅಂತಿಮ ವರ್ಷ', 'चतुर्थ / अंतिम वर्ष'),
+        ],
+      },
+      {
+        id: 'hostelType',
+        label: createLoc('Accommodation Type', 'ವಸತಿ ವಿವರ', 'आवास प्रकार'),
+        type: 'select',
+        required: true,
+        options: [
+          createLoc('Day Scholar (Commuting from home)', 'ಮನೆಯಿಂದ ಓಡಾಟ (ಡೇ ಸ್ಕಾಲರ್)', 'घर से आना-जाना (डे स्कॉलर)'),
+          createLoc('Govt Student Hostel', 'ಸರ್ಕಾರಿ ಹಾಸ್ಟೆಲ್', 'सरकारी छात्रावास'),
+          createLoc('Private PG / Rental Room', 'ಖಾಸಗಿ ಪಿಜಿ / ಬಾಡಿಗೆ ಕೊಠಡಿ', 'निजी पीजी / किराए का कमरा'),
+        ],
+      },
+    ],
+  },
 
   // ================= FARMER =================
   {
@@ -164,6 +223,54 @@ export const ASSIST_FILL_FORMS: AssistFillFormConfig[] = [
       },
     ],
   },
+  {
+    id: 'form-eshram-national',
+    role: 'worker',
+    states: 'ALL',
+    title: createLoc(
+      'e-Shram National Unorganised Worker UAN & Welfare Card Form',
+      'ಇ-ಶ್ರಮ್ ರಾಷ್ಟ್ರೀಯ ಅಸಂಘಟಿತ ಕಾರ್ಮಿಕರ ಯುಎಎನ್ ಮತ್ತು ಕಲ್ಯಾಣ ಕಾರ್ಡ್ ಅರ್ಜಿ',
+      'ई-श्रम राष्ट्रीय असंगठित श्रमिक यूएएन एवं कल्याण कार्ड फॉर्म'
+    ),
+    department: createLoc(
+      'Ministry of Labour & Employment, Government of India',
+      'ಕಾರ್ಮಿಕ ಮತ್ತು ಉದ್ಯೋಗ ಸಚಿವಾಲಯ, ಭಾರತ ಸರ್ಕಾರ',
+      'श्रम एवं रोजगार मंत्रालय, भारत सरकार'
+    ),
+    description: createLoc(
+      'All-India registration for 12-digit Universal Account Number (UAN), ₹2 Lakh accidental insurance cover, and PM-SYM pension linkage.',
+      '೧೨ ಅಂಕಿಯ ಯುಎಎನ್ ಕಾರ್ಡ್, ₹2 ಲಕ್ಷ ಅಪಘಾತ ವಿಮೆ ಮತ್ತು ಪಿಎಂ-ಎಸ್‌ವೈಎಂ ಪಿಂಚಣಿಗಾಗಿ ಅಖಿಲ ಭಾರತ ನೋಂದಣಿ.',
+      '12 अंकों के यूएएन कार्ड, ₹2 लाख दुर्घटना बीमा और पीएम-एसवाईएम पेंशन हेतु अखिल भारतीय पंजीकरण।'
+    ),
+    requiredDocs: [
+      createLoc('Aadhaar Card (Mobile Linked)', 'ಆಧಾರ್ ಕಾರ್ಡ್ (ಮೊಬೈಲ್ ಲಿಂಕ್)', 'आधार कार्ड (मोबाइल लिंक)'),
+      createLoc('Bank Passbook / IFSC Details', 'ಬ್ಯಾಂಕ್ ಪಾಸ್‌ಬುಕ್ / IFSC ವಿವರ', 'बैंक पासबुक / IFSC विवरण'),
+    ],
+    portalUrl: 'https://eshram.gov.in',
+    formSpecificFields: [
+      {
+        id: 'primaryTrade',
+        label: createLoc('Primary Occupation / NCO Trade', 'ಪ್ರಮುಖ ವೃತ್ತಿ / ಕೌಶಲ್ಯ', 'मुख्य व्यवसाय / कौशल'),
+        type: 'select',
+        required: true,
+        options: [
+          createLoc('Masonry / Bricklaying', 'ಮೇಸ್ತ್ರಿ / ಗಾರೆ ಕೆಲಸ', 'राजमिस्त्री / चिनाई'),
+          createLoc('Carpentry / Woodwork', 'ಬಡಗಿ / ಮರಗೆಲಸ', 'बढ़ई का काम'),
+          createLoc('Plumbing & Sanitation', 'ಪ್ಲಂಬಿಂಗ್', 'प्लंबर का काम'),
+          createLoc('Electrical Wiring', 'ವಿದ್ಯುತ್ ತಂತಿ ಜೋಡಣೆ', 'बिजली का काम'),
+          createLoc('Delivery / Gig / Transport Worker', 'ಡೆಲಿವರಿ / ಗಿಗ್ / ಸಾರಿಗೆ ಕಾರ್ಮಿಕ', 'डिलीवरी / गिग / परिवहन श्रमिक'),
+          createLoc('Daily Wage / General Labour', 'ದಿನಗೂಲಿ ಕಾರ್ಮಿಕ', 'दैनिक मजदूरी / हेल्पर'),
+        ],
+      },
+      {
+        id: 'employerName',
+        label: createLoc('Work Location / Contractor / Self-Employed', 'ಕೆಲಸದ ಸ್ಥಳ / ಗುತ್ತಿಗೆದಾರ / ಸ್ವಯಂ ಉದ್ಯೋಗ', 'कार्य स्थल / ठेकेदार / स्व-रोजगार'),
+        type: 'text',
+        required: true,
+        placeholder: createLoc('e.g. Self-Employed / Local Site', 'ಉದಾ. ಸ್ವಯಂ ಉದ್ಯೋಗ / ಸ್ಥಳೀಯ ಸೈಟ್', 'उदा. स्व-रोजगार / स्थानीय साइट'),
+      },
+    ],
+  },
 
   // ================= SENIOR CITIZEN =================
   {
@@ -198,6 +305,52 @@ export const ASSIST_FILL_FORMS: AssistFillFormConfig[] = [
         required: true,
         placeholder: createLoc('e.g. 66', 'ಉದಾ. ೬೬', 'उदा. 66'),
         helperText: createLoc('Must be 65 years or above for Sandhya Suraksha', 'ಸಂಧ್ಯಾ ಸುರಕ್ಷಾ ಯೋಜನೆಗೆ ೬೫ ವರ್ಷ ಮೇಲ್ಪಟ್ಟಿರಬೇಕು', 'संध्या सुरक्षा हेतु 65 वर्ष या अधिक'),
+      },
+      {
+        id: 'livingArrangement',
+        label: createLoc('Current Living Situation', 'ಪ್ರಸ್ತುತ ವಾಸಿಸುವ ಪರಿಸ್ಥಿತಿ', 'वर्तमान निवास स्थिति'),
+        type: 'select',
+        required: true,
+        options: [
+          createLoc('Living with Family / Children', 'ಕುಟುಂಬ / ಮಕ್ಕಳೊಂದಿಗೆ ವಾಸ', 'परिवार / बच्चों के साथ'),
+          createLoc('Living Alone / With Spouse', 'ಒಂಟಿಯಾಗಿ / ಸಂಗಾತಿಯೊಂದಿಗೆ ವಾಸ', 'अकेले / जीवनसाथी के साथ'),
+          createLoc('Living in Senior Care / Home', 'ವೃದ್ಧಾಶ್ರಮದಲ್ಲಿ ವಾಸ', 'वृद्धाश्रम में'),
+        ],
+      },
+    ],
+  },
+  {
+    id: 'form-ignoaps-national-pension',
+    role: 'senior',
+    states: 'ALL',
+    title: createLoc(
+      'Indira Gandhi National Old Age Pension (IGNOAPS) Application',
+      'ಇಂದಿರಾ ಗಾಂಧಿ ರಾಷ್ಟ್ರೀಯ ವೃದ್ಧಾಪ್ಯ ಪಿಂಚಣಿ (IGNOAPS) ಅರ್ಜಿ',
+      'इंदिरा गांधी राष्ट्रीय वृद्धावस्था पेंशन (IGNOAPS) आवेदन'
+    ),
+    department: createLoc(
+      'National Social Assistance Programme (NSAP), GoI',
+      'ರಾಷ್ಟ್ರೀಯ ಸಾಮಾಜಿಕ ನೆರವು ಕಾರ್ಯಕ್ರಮ (NSAP), ಭಾರತ ಸರ್ಕಾರ',
+      'राष्ट्रीय सामाजिक सहायता कार्यक्रम (NSAP), भारत सरकार'
+    ),
+    description: createLoc(
+      'All-India monthly senior citizen pension and Digital Life Certificate (Jeevan Pramaan) enrollment for citizens aged 60+.',
+      '೬೦ ವರ್ಷ ಮೇಲ್ಪಟ್ಟ ಹಿರಿಯ ನಾಗರಿಕರಿಗೆ ಮಾಸಿಕ ಪಿಂಚಣಿ ಮತ್ತು ಜೀವನ್ ಪ್ರಮಾಣ್ ನೋಂದಣಿ.',
+      '60+ वर्ष के वरिष्ठ नागरिकों के लिए मासिक पेंशन और जीवन प्रमाण नामांकन।'
+    ),
+    requiredDocs: [
+      createLoc('Statutory Age Proof Document', 'ವಯಸ್ಸಿನ ದಾಖಲೆ', 'आयु प्रमाण पत्र'),
+      createLoc('BPL / Income Declaration Certificate', 'ಬಿಪಿಎಲ್ / ಆದಾಯ ಘೋಷಣಾ ಪ್ರಮಾಣಪತ್ರ', 'बीपीएल / आय घोषणा प्रमाणपत्र'),
+    ],
+    portalUrl: 'https://nsap.nic.in',
+    formSpecificFields: [
+      {
+        id: 'exactAge',
+        label: createLoc('Completed Age in Years', 'ಪೂರ್ಣಗೊಂಡ ವಯಸ್ಸು (ವರ್ಷಗಳಲ್ಲಿ)', 'पूर्ण आयु (वर्षों में)'),
+        type: 'number',
+        required: true,
+        placeholder: createLoc('e.g. 64', 'ಉದಾ. ೬೪', 'उदा. 64'),
+        helperText: createLoc('Must be 60 years or above for IGNOAPS central pension', 'ಐಜಿಎನ್‌ಒಎಪಿಎಸ್ ಪಿಂಚಣಿಗೆ ೬೦ ವರ್ಷ ಅಥವಾ ಅದಕ್ಕಿಂತ ಹೆಚ್ಚಿರಬೇಕು', 'आईजीएनओएपीएस पेंशन हेतु 60 वर्ष या अधिक'),
       },
       {
         id: 'livingArrangement',

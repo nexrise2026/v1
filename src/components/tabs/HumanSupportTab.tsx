@@ -10,15 +10,48 @@ import {
   PhoneCall,
   X,
   Copy,
-  Printer,
   ShieldCheck,
+  Navigation,
+  Search,
+  Loader2,
+  ExternalLink,
+  AlertCircle,
+  Crosshair,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SUPPORT_CONTACTS } from '../../data/support';
 import { SupportContact } from '../../types';
 
+interface NearbyOffice {
+  id: string;
+  name: string;
+  address: string;
+  location: { latitude: number; longitude: number } | null;
+  phone: string | null;
+  openNow: boolean | null;
+  googleMapsUri: string | null;
+  directionsUri: string | null;
+}
+
+interface DirectionsInfo {
+  officeId: string;
+  officeName: string;
+  distanceText: string;
+  durationText: string;
+  travelMode: string;
+  steps: Array<{ instruction: string; distanceMeters: number; duration: string }>;
+}
+
+const QUICK_OFFICE_QUERIES = [
+  'Taluk Office Tehsildar',
+  'Common Service Centre CSC',
+  'District Social Welfare Office',
+  'Agriculture Department Krishi Kendra',
+  'District Collectorate',
+];
+
 export const HumanSupportTab: React.FC = () => {
-  const { t, getLoc, userProfile, filterByCitizen, chatMessages } = useApp();
+  const { t, getLoc, userProfile, selectedLanguage, filterByCitizen, chatMessages } = useApp();
 
   const [callbackContact, setCallbackContact] = useState<SupportContact | null>(null);
   const [callbackPhoneInput, setCallbackPhoneInput] = useState('');
@@ -27,9 +60,119 @@ export const HumanSupportTab: React.FC = () => {
   const [issueSummaryModalContact, setIssueSummaryModalContact] = useState<SupportContact | null>(null);
   const [copiedSummary, setCopiedSummary] = useState(false);
 
+  // Google Maps Nearby Government Offices & Directions state
+  const [officeQuery, setOfficeQuery] = useState('Taluk Office Tehsildar');
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [searchingOffices, setSearchingOffices] = useState(false);
+  const [nearbyOffices, setNearbyOffices] = useState<NearbyOffice[]>([]);
+  const [mapsError, setMapsError] = useState<string | null>(null);
+  const [hasSearchedMaps, setHasSearchedMaps] = useState(false);
+
+  const [loadingRouteId, setLoadingRouteId] = useState<string | null>(null);
+  const [activeDirections, setActiveDirections] = useState<DirectionsInfo | null>(null);
+
   const filteredContacts = filterByCitizen(SUPPORT_CONTACTS);
 
-  // Generate localized comprehensive issue brief for department officer
+  const handleUseMyLocation = () => {
+    setMapsError(null);
+    if (!navigator.geolocation) {
+      setMapsError('Geolocation is not supported by this browser.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+        setLocating(false);
+      },
+      (err) => {
+        setMapsError(`Location permission unavailable (${err.message}). Searching using your profile district/state instead.`);
+        setLocating(false);
+      },
+      { enableHighAccuracy: false, timeout: 10000 }
+    );
+  };
+
+  const handleSearchNearbyOffices = async (customQuery?: string) => {
+    const query = (customQuery ?? officeQuery).trim();
+    if (!query) return;
+    if (customQuery) setOfficeQuery(customQuery);
+
+    setSearchingOffices(true);
+    setMapsError(null);
+    setActiveDirections(null);
+    setHasSearchedMaps(true);
+
+    try {
+      const res = await fetch('/api/maps/nearby-offices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          state: userProfile.state || 'India',
+          district: userProfile.district || undefined,
+          lat: userCoords?.lat,
+          lng: userCoords?.lng,
+          languageCode: selectedLanguage.code,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Could not fetch nearby government offices.');
+      }
+      setNearbyOffices(Array.isArray(data.offices) ? data.offices : []);
+    } catch (err: any) {
+      setNearbyOffices([]);
+      setMapsError(err?.message || 'Unable to reach Google Maps office locator.');
+    } finally {
+      setSearchingOffices(false);
+    }
+  };
+
+  const handleGetDirections = async (office: NearbyOffice) => {
+    setLoadingRouteId(office.id);
+    setMapsError(null);
+
+    try {
+      const originAddress = [userProfile.district, userProfile.state, 'India'].filter(Boolean).join(', ');
+      const res = await fetch('/api/maps/directions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originLat: userCoords?.lat,
+          originLng: userCoords?.lng,
+          originAddress: userCoords ? undefined : originAddress,
+          destinationPlaceId: office.id || undefined,
+          destinationLat: office.location?.latitude,
+          destinationLng: office.location?.longitude,
+          destinationAddress: office.address || undefined,
+          travelMode: 'DRIVE',
+          languageCode: selectedLanguage.code,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Could not compute directions.');
+      }
+      setActiveDirections({
+        officeId: office.id,
+        officeName: office.name,
+        distanceText: data.distanceText,
+        durationText: data.durationText,
+        travelMode: data.travelMode,
+        steps: Array.isArray(data.steps) ? data.steps : [],
+      });
+    } catch (err: any) {
+      setMapsError(err?.message || 'Unable to compute route directions.');
+    } finally {
+      setLoadingRouteId(null);
+    }
+  };
+
   const generateIssueSummary = (contact: SupportContact) => {
     const recentQueries = chatMessages
       .filter((m) => m.sender === 'user')
@@ -73,8 +216,25 @@ ${recentQueries || '• Seeking initial guidance on role-based welfare entitleme
 `;
   };
 
-  const handleCopySummary = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopySummary = async (text: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error('Clipboard API unavailable');
+      }
+    } catch {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } catch (e) {}
+    }
     setCopiedSummary(true);
     setTimeout(() => setCopiedSummary(false), 2000);
   };
@@ -96,7 +256,204 @@ ${recentQueries || '• Seeking initial guidance on role-based welfare entitleme
         </p>
       </div>
 
-      {/* Support Cards Grid */}
+      {/* Nearby Government Offices & Directions (Google Maps Places API New + Routes API) */}
+      <section className="bg-white/85 backdrop-blur-md rounded-3xl p-5 border border-cyan-200/70 shadow-xs space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#0284c7] to-[#10b981] text-white flex items-center justify-center">
+              <MapPin className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-[#091526]">
+                Find Nearby Government Offices & Directions
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                Search near {userCoords ? 'your live GPS coordinates' : `${userProfile.district || userProfile.state || 'India'}`}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleUseMyLocation}
+            disabled={locating}
+            className="px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            {locating ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Crosshair className="w-3.5 h-3.5" />
+            )}
+            <span>{userCoords ? 'Location Set' : 'Use My Location'}</span>
+          </button>
+        </div>
+
+        {/* Search Input + Button */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSearchNearbyOffices();
+          }}
+          className="flex flex-col sm:flex-row gap-2"
+        >
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={officeQuery}
+              onChange={(e) => setOfficeQuery(e.target.value)}
+              placeholder="e.g., Taluk Office, Grama One, CSC, Social Welfare Office..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-sky-600 focus:bg-white"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={searchingOffices || !officeQuery.trim()}
+            className="px-4 py-2.5 bg-gradient-to-r from-[#0369a1] to-[#0d9488] hover:from-[#0284c7] hover:to-[#0f766e] disabled:opacity-50 text-white font-semibold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+          >
+            {searchingOffices ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4" />
+            )}
+            <span>Search Offices</span>
+          </button>
+        </form>
+
+        {/* Quick office chips */}
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_OFFICE_QUERIES.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => handleSearchNearbyOffices(preset)}
+              className="text-[11px] bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-800 px-2.5 py-1 rounded-full border border-slate-200 hover:border-cyan-300 transition-colors cursor-pointer font-medium"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+
+        {/* Maps Error / Unconfigured Notice */}
+        {mapsError && (
+          <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <span>{mapsError}</span>
+          </div>
+        )}
+
+        {/* Active Directions Panel */}
+        {activeDirections && (
+          <div className="p-4 rounded-2xl bg-sky-50/80 border border-sky-200 space-y-2.5 text-xs animate-in fade-in">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-[#091526] flex items-center gap-1.5">
+                  <Navigation className="w-4 h-4 text-sky-600" />
+                  <span>Directions to {activeDirections.officeName}</span>
+                </h3>
+                <p className="text-sky-800 font-semibold mt-0.5">
+                  {activeDirections.distanceText} • {activeDirections.durationText} ({activeDirections.travelMode})
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveDirections(null)}
+                className="p-1 rounded-lg text-slate-500 hover:bg-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {activeDirections.steps.length > 0 && (
+              <ol className="space-y-1.5 max-h-48 overflow-y-auto pr-1 list-decimal list-inside text-slate-700">
+                {activeDirections.steps.map((step, idx) => (
+                  <li key={idx} className="bg-white/90 px-2.5 py-1.5 rounded-lg border border-sky-100">
+                    <span className="font-medium">{step.instruction}</span>{' '}
+                    <span className="text-slate-400">
+                      ({step.distanceMeters >= 1000 ? `${(step.distanceMeters / 1000).toFixed(1)} km` : `${step.distanceMeters} m`})
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        )}
+
+        {/* Returned Nearby Offices */}
+        {nearbyOffices.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {nearbyOffices.map((office) => (
+              <div
+                key={office.id || office.name}
+                className="p-4 rounded-2xl bg-white border border-slate-200/90 space-y-2 shadow-2xs flex flex-col justify-between"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-xs sm:text-sm font-bold text-[#091526] leading-snug">
+                      {office.name}
+                    </h3>
+                    {office.openNow !== null && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                          office.openNow
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}
+                      >
+                        {office.openNow ? 'Open Now' : 'Closed'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">{office.address}</p>
+                  {office.phone && (
+                    <a
+                      href={`tel:${office.phone}`}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:underline"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      <span>{office.phone}</span>
+                    </a>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={loadingRouteId === office.id}
+                    onClick={() => handleGetDirections(office)}
+                    className="flex-1 py-1.5 px-2.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    {loadingRouteId === office.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Navigation className="w-3.5 h-3.5" />
+                    )}
+                    <span>Route Steps</span>
+                  </button>
+
+                  {(office.directionsUri || office.googleMapsUri) && (
+                    <a
+                      href={office.directionsUri || office.googleMapsUri || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-1.5 px-2.5 bg-[#091526] hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1"
+                    >
+                      <span>Google Maps</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {hasSearchedMaps && !searchingOffices && !mapsError && nearbyOffices.length === 0 && (
+          <p className="text-xs text-slate-500 text-center py-2">
+            No matching offices found for this query. Try a broader term like "District Collectorate" or "CSC".
+          </p>
+        )}
+      </section>
+
+      {/* Verified Helplines & Support Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredContacts.map((contact: SupportContact) => (
           <div
@@ -104,7 +461,6 @@ ${recentQueries || '• Seeking initial guidance on role-based welfare entitleme
             className="bg-white/80 hover:bg-white backdrop-blur-md rounded-3xl p-5 border border-white/80 hover:border-cyan-300 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
           >
             <div>
-              {/* Header: Office name & verified badge */}
               <div className="flex items-start justify-between gap-2 mb-2">
                 <h3 className="text-base font-bold text-[#091526] leading-snug">
                   {getLoc(contact.officeName)}
@@ -117,7 +473,6 @@ ${recentQueries || '• Seeking initial guidance on role-based welfare entitleme
                 )}
               </div>
 
-              {/* Who it helps */}
               <div className="p-3 bg-sky-50/70 rounded-2xl border border-sky-100/80 mb-3 text-xs">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-sky-800 block mb-0.5">
                   {t.whoItHelpsLabel}
@@ -127,7 +482,6 @@ ${recentQueries || '• Seeking initial guidance on role-based welfare entitleme
                 </p>
               </div>
 
-              {/* Detail Items */}
               <div className="space-y-2 text-xs text-slate-600 mb-4">
                 <div className="flex items-start gap-2">
                   <Clock className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -165,7 +519,6 @@ ${recentQueries || '• Seeking initial guidance on role-based welfare entitleme
               </div>
             </div>
 
-            {/* Action Buttons Row */}
             <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -278,7 +631,7 @@ ${recentQueries || '• Seeking initial guidance on role-based welfare entitleme
         </div>
       )}
 
-      {/* Prepare Issue Summary Modal (Generates Instant Comprehensive Citizen Brief) */}
+      {/* Prepare Issue Summary Modal */}
       {issueSummaryModalContact && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
@@ -303,12 +656,10 @@ ${recentQueries || '• Seeking initial guidance on role-based welfare entitleme
               {t.summaryPreparedNotice}
             </p>
 
-            {/* Generated Text Box */}
             <pre className="p-4 bg-slate-50 rounded-2xl border border-slate-200 font-mono text-[11px] text-slate-800 whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed select-text">
               {generateIssueSummary(issueSummaryModalContact)}
             </pre>
 
-            {/* Action buttons */}
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
               <span className="text-[11px] text-slate-400">
                 Encrypted & Signed by NIRVAHA AI

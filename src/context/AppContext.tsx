@@ -6,11 +6,17 @@ import {
   UserProfile,
   TabKey,
   ChatMessage,
+  ChatSession,
   TaskItem,
   StoredDocStatus,
 } from '../types';
 import { SUPPORTED_LANGUAGES, getLocalized } from '../data/languages';
 import { TRANSLATIONS, TranslationDictionary } from '../data/translations';
+
+export interface SupabaseAuthResult {
+  status: 'authenticated' | 'email_confirmation_required' | 'not_configured' | 'error';
+  message?: string;
+}
 
 interface AppContextType {
   selectedLanguage: LanguageInfo;
@@ -22,6 +28,12 @@ interface AppContextType {
   updateUserProfile: (updates: Partial<UserProfile>) => void;
   setRole: (role: RoleKey) => void;
 
+  authUser: { id: string; email: string } | null;
+  authToken: string | null;
+  signInWithSupabase: (email: string, password: string) => Promise<SupabaseAuthResult>;
+  signUpWithSupabase: (email: string, password: string, fullName?: string) => Promise<SupabaseAuthResult>;
+  signOutSupabase: () => void;
+
   onboardingStep: 1 | 2 | 3;
   setOnboardingStep: (step: 1 | 2 | 3) => void;
   onboardingComplete: boolean;
@@ -32,9 +44,16 @@ interface AppContextType {
   setActiveTab: (tab: TabKey) => void;
 
   chatMessages: ChatMessage[];
+  chatSessions: ChatSession[];
+  activeChatSessionId: string | null;
   addChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => string;
   updateChatMessage: (id: string, text: string) => void;
+  persistChatMessage: (message: { id: string; sender: 'user' | 'assistant'; text: string; isVoice?: boolean }) => void;
   clearChat: () => void;
+  startNewChat: () => void;
+  loadChatSession: (sessionId: string) => void;
+  deleteChatSession: (sessionId: string) => void;
+  clearAllChatHistory: () => void;
 
   voiceTranscript: string;
   setVoiceTranscript: (text: string) => void;
@@ -74,6 +93,11 @@ const defaultProfile: UserProfile = {
   ageOrProofNumber: '',
 };
 
+const VALID_ROLES: RoleKey[] = ['student', 'farmer', 'worker', 'senior', 'disability'];
+
+const isPlainObject = (val: unknown): val is Record<string, any> =>
+  typeof val === 'object' && val !== null && !Array.isArray(val);
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -85,9 +109,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const found = SUPPORTED_LANGUAGES.find((l) => l.code === savedLang);
         if (found) return found;
       }
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
     return defaultLanguage;
   });
 
@@ -97,7 +119,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       localStorage.setItem('nirvaha_lang', code);
     } catch (e) {}
-    // Set document direction for Urdu
     document.documentElement.dir = lang.dir;
     document.documentElement.lang = lang.bcp47;
   };
@@ -107,7 +128,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     document.documentElement.lang = selectedLanguage.bcp47;
   }, [selectedLanguage]);
 
-  // Current translation dictionary
   const t = useMemo(() => {
     return TRANSLATIONS[selectedLanguage.code] || TRANSLATIONS.en;
   }, [selectedLanguage]);
@@ -116,18 +136,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return getLocalized(textObj, selectedLanguage.code);
   };
 
-  // 2. User profile
+  // 2. Supabase Auth Session (kept in sessionStorage so tokens are scoped cleanly)
+  const [authToken, setAuthToken] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('nirvaha_auth_token');
+    } catch {
+      return null;
+    }
+  });
+  const [authUser, setAuthUser] = useState<{ id: string; email: string } | null>(() => {
+    try {
+      const raw = sessionStorage.getItem('nirvaha_auth_user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // 3. User profile
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     try {
       const saved = localStorage.getItem('nirvaha_profile');
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (isPlainObject(parsed)) {
+          const validRole = VALID_ROLES.includes(parsed.role) ? parsed.role : defaultProfile.role;
+          return {
+            ...defaultProfile,
+            ...parsed,
+            role: validRole,
+          };
+        }
       }
     } catch (e) {}
     return defaultProfile;
   });
 
-  // 3. Onboarding states
+  // 4. Onboarding states
   const [onboardingComplete, setOnboardingComplete] = useState<boolean>(() => {
     try {
       return localStorage.getItem('nirvaha_onboarded') === 'true';
@@ -138,43 +183,261 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [onboardingStep, setOnboardingStep] = useState<1 | 2 | 3>(1);
 
-  // 4. Active tab
+  // 5. Active tab
   const [activeTab, setActiveTab] = useState<TabKey>('home');
 
-  // 5. Chat messages
+  // 6. Chat messages & persisted chat history sessions
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem('nirvaha_chat');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (m) => isPlainObject(m) && typeof m.id === 'string' && typeof m.text === 'string'
+          );
+        }
+      }
     } catch (e) {}
     return [];
   });
 
-  // Save non-sensitive data
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>(() => {
+    try {
+      const saved = localStorage.getItem('nirvaha_chat_sessions');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (s) => isPlainObject(s) && typeof s.id === 'string' && Array.isArray(s.messages)
+          );
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('nirvaha_active_chat_session') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Sync profile & chat history from Supabase whenever authenticated
+  const hydrateFromSupabase = async (token: string) => {
+    try {
+      const [profileRes, chatRes] = await Promise.all([
+        fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/chat/history', { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+
+      if (profileRes.ok) {
+        const data = await profileRes.json();
+        if (data?.profile && isPlainObject(data.profile)) {
+          const p = data.profile;
+          const validRole = VALID_ROLES.includes(p.role) ? p.role : 'student';
+          setUserProfile((prev) => ({
+            ...prev,
+            fullName: p.fullName || prev.fullName,
+            role: validRole,
+            state: p.state || prev.state,
+            district: p.district || prev.district,
+            category: p.category || prev.category,
+            annualIncome: p.annualIncome || prev.annualIncome,
+            rationCard: p.rationCard || prev.rationCard,
+            gender: p.gender || prev.gender,
+            ageOrProofNumber: p.ageOrProofNumber || prev.ageOrProofNumber,
+          }));
+          if (p.preferredLanguage) {
+            const lang = SUPPORTED_LANGUAGES.find((l) => l.code === p.preferredLanguage);
+            if (lang) setLanguage(lang.code);
+          }
+        }
+      }
+
+      if (chatRes.ok) {
+        const data = await chatRes.json();
+        if (Array.isArray(data?.messages) && data.messages.length > 0) {
+          setChatMessages(data.messages);
+        }
+      }
+    } catch (e) {
+      console.warn('Supabase hydration notice:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (authToken) {
+      hydrateFromSupabase(authToken);
+    }
+  }, [authToken]);
+
+  const signInWithSupabase = async (email: string, password: string): Promise<SupabaseAuthResult> => {
+    try {
+      const res = await fetch('/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 503 && data?.code === 'API_KEY_NOT_CONFIGURED') {
+        return { status: 'not_configured', message: data.error };
+      }
+      if (!res.ok) {
+        return { status: 'error', message: data?.error || 'Sign-in failed.' };
+      }
+      if (data.accessToken && data.user) {
+        setAuthToken(data.accessToken);
+        setAuthUser(data.user);
+        try {
+          sessionStorage.setItem('nirvaha_auth_token', data.accessToken);
+          sessionStorage.setItem('nirvaha_auth_user', JSON.stringify(data.user));
+        } catch {}
+        return { status: 'authenticated' };
+      }
+      return { status: 'error', message: 'Authentication session could not be created.' };
+    } catch (err: any) {
+      return { status: 'error', message: err?.message || 'Unable to reach authentication server.' };
+    }
+  };
+
+  const signUpWithSupabase = async (
+    email: string,
+    password: string,
+    fullName?: string
+  ): Promise<SupabaseAuthResult> => {
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, fullName }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 503 && data?.code === 'API_KEY_NOT_CONFIGURED') {
+        return { status: 'not_configured', message: data.error };
+      }
+      if (!res.ok) {
+        return { status: 'error', message: data?.error || 'Account registration failed.' };
+      }
+      if (data.accessToken && data.user) {
+        setAuthToken(data.accessToken);
+        setAuthUser(data.user);
+        try {
+          sessionStorage.setItem('nirvaha_auth_token', data.accessToken);
+          sessionStorage.setItem('nirvaha_auth_user', JSON.stringify(data.user));
+        } catch {}
+        return { status: 'authenticated' };
+      }
+      if (data.requiresEmailConfirmation) {
+        return {
+          status: 'email_confirmation_required',
+          message: 'Account created! Please check your email to confirm before signing in.',
+        };
+      }
+      return { status: 'error', message: 'Registration incomplete.' };
+    } catch (err: any) {
+      return { status: 'error', message: err?.message || 'Unable to reach authentication server.' };
+    }
+  };
+
+  const signOutSupabase = () => {
+    setAuthToken(null);
+    setAuthUser(null);
+    try {
+      sessionStorage.removeItem('nirvaha_auth_token');
+      sessionStorage.removeItem('nirvaha_auth_user');
+    } catch {}
+  };
+
+  // Persist local profile & sync to Supabase when logged in
   useEffect(() => {
     try {
       localStorage.setItem('nirvaha_profile', JSON.stringify(userProfile));
     } catch (e) {}
-  }, [userProfile]);
+
+    if (authToken && userProfile.fullName) {
+      const timer = setTimeout(() => {
+        fetch('/api/profile', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            ...userProfile,
+            preferredLanguage: selectedLanguage.code,
+          }),
+        }).catch(() => {});
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [userProfile, authToken, selectedLanguage.code]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
         localStorage.setItem('nirvaha_chat', JSON.stringify(chatMessages.slice(-50)));
       } catch (e) {}
-    }, 500);
+    }, 300);
     return () => clearTimeout(timer);
   }, [chatMessages]);
 
-  // 6. Voice States
+  // Keep active conversation automatically synced into chatSessions history
+  useEffect(() => {
+    const nonEmpty = chatMessages.filter((m) => m.text && m.text.trim().length > 0);
+    if (nonEmpty.length === 0) return;
+
+    const firstUserMsg = nonEmpty.find((m) => m.sender === 'user')?.text || nonEmpty[0].text;
+    const title = firstUserMsg.trim().slice(0, 60) + (firstUserMsg.trim().length > 60 ? '...' : '');
+    const sessionId = activeChatSessionId || `session_${nonEmpty[0].timestamp || Date.now()}`;
+
+    if (!activeChatSessionId) {
+      setActiveChatSessionId(sessionId);
+    }
+
+    setChatSessions((prev) => {
+      const updatedSession: ChatSession = {
+        id: sessionId,
+        title,
+        updatedAt: nonEmpty[nonEmpty.length - 1].timestamp || Date.now(),
+        languageCode: selectedLanguage.code,
+        messages: nonEmpty.slice(-50),
+      };
+      const others = prev.filter((s) => s.id !== sessionId);
+      return [updatedSession, ...others].slice(0, 30);
+    });
+  }, [chatMessages, activeChatSessionId, selectedLanguage.code]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nirvaha_chat_sessions', JSON.stringify(chatSessions.slice(0, 30)));
+    } catch (e) {}
+  }, [chatSessions]);
+
+  useEffect(() => {
+    try {
+      if (activeChatSessionId) {
+        localStorage.setItem('nirvaha_active_chat_session', activeChatSessionId);
+      } else {
+        localStorage.removeItem('nirvaha_active_chat_session');
+      }
+    } catch (e) {}
+  }, [activeChatSessionId]);
+
+  // 7. Voice States
   const [voiceTranscript, setVoiceTranscript] = useState<string>('');
   const [pendingVoiceQuery, setPendingVoiceQuery] = useState<string | null>(null);
 
-  // 7. Custom Tasks & Statuses
+  // 8. Custom Tasks & Statuses
   const [customTasks, setCustomTasks] = useState<TaskItem[]>(() => {
     try {
       const saved = localStorage.getItem('nirvaha_custom_tasks');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (e) {}
     return [];
   });
@@ -182,7 +445,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [taskStatuses, setTaskStatuses] = useState<Record<string, 'not_started' | 'in_progress' | 'completed'>>(() => {
     try {
       const saved = localStorage.getItem('nirvaha_task_statuses');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (isPlainObject(parsed)) return parsed;
+      }
     } catch (e) {}
     return {};
   });
@@ -194,12 +460,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {}
   }, [customTasks, taskStatuses]);
 
-  // 8. Consents
+  // 9. Consents
   const [consentPreferences, setConsentPreferences] = useState<Record<string, 'allowed' | 'denied' | 'pending' | 'revoked'>>(
     () => {
       try {
         const saved = localStorage.getItem('nirvaha_consents');
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (isPlainObject(parsed)) return parsed;
+        }
       } catch (e) {}
       return {};
     }
@@ -211,11 +480,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {}
   }, [consentPreferences]);
 
-  // 9. Document vault status
+  // 10. Document vault status
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, StoredDocStatus>>(() => {
     try {
       const saved = localStorage.getItem('nirvaha_docs');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (isPlainObject(parsed)) return parsed;
+      }
     } catch (e) {}
     return {};
   });
@@ -226,24 +498,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {}
   }, [uploadedDocs]);
 
-  // 10. Profile drawer
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
 
-  // Profile updaters
   const updateUserProfile = (updates: Partial<UserProfile>) => {
-    setUserProfile((prev) => {
-      const next = { ...prev, ...updates };
-      // Check if role, state or district changed to reset custom tasks as per requirement:
-      // "Reset custom tasks, selected forms, and chat suggestions whenever role, state, or district changes."
-      if (
-        (updates.role && updates.role !== prev.role) ||
-        (updates.state && updates.state !== prev.state) ||
-        (updates.district && updates.district !== prev.district)
-      ) {
-        setCustomTasks([]);
-      }
-      return next;
-    });
+    const contextChanged =
+      (updates.role !== undefined && updates.role !== userProfile.role) ||
+      (updates.state !== undefined && updates.state !== userProfile.state) ||
+      (updates.district !== undefined && updates.district !== userProfile.district);
+
+    setUserProfile((prev) => ({ ...prev, ...updates }));
+
+    if (contextChanged) {
+      setCustomTasks([]);
+    }
   };
 
   const setRole = (role: RoleKey) => {
@@ -259,6 +526,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const resetOnboarding = () => {
+    signOutSupabase();
     setOnboardingComplete(false);
     setOnboardingStep(1);
     try {
@@ -266,7 +534,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {}
   };
 
-  // Chat helpers
+  const persistChatMessage = (message: {
+    id: string;
+    sender: 'user' | 'assistant';
+    text: string;
+    isVoice?: boolean;
+  }) => {
+    if (!authToken || !message.text.trim()) return;
+    fetch('/api/chat/history', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        ...message,
+        languageCode: selectedLanguage.code,
+      }),
+    }).catch(() => {});
+  };
+
   const addChatMessage = (message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const id = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const newMsg: ChatMessage = {
@@ -275,6 +562,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       timestamp: Date.now(),
     };
     setChatMessages((prev) => [...prev, newMsg]);
+    if (message.sender === 'user' && message.text.trim()) {
+      persistChatMessage({
+        id,
+        sender: 'user',
+        text: message.text,
+        isVoice: message.isVoice,
+      });
+    }
     return id;
   };
 
@@ -286,12 +581,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const clearChat = () => {
     setChatMessages([]);
+    setActiveChatSessionId(null);
     try {
       localStorage.removeItem('nirvaha_chat');
+      localStorage.removeItem('nirvaha_active_chat_session');
+    } catch (e) {}
+    if (authToken) {
+      fetch('/api/chat/history', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` },
+      }).catch(() => {});
+    }
+  };
+
+  const startNewChat = () => {
+    setChatMessages([]);
+    setActiveChatSessionId(null);
+    try {
+      localStorage.removeItem('nirvaha_chat');
+      localStorage.removeItem('nirvaha_active_chat_session');
     } catch (e) {}
   };
 
-  // Task helpers
+  const loadChatSession = (sessionId: string) => {
+    const found = chatSessions.find((s) => s.id === sessionId);
+    if (!found) return;
+    setActiveChatSessionId(found.id);
+    setChatMessages(found.messages);
+  };
+
+  const deleteChatSession = (sessionId: string) => {
+    setChatSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    if (activeChatSessionId === sessionId) {
+      setChatMessages([]);
+      setActiveChatSessionId(null);
+      try {
+        localStorage.removeItem('nirvaha_chat');
+        localStorage.removeItem('nirvaha_active_chat_session');
+      } catch (e) {}
+    }
+  };
+
+  const clearAllChatHistory = () => {
+    setChatSessions([]);
+    clearChat();
+    try {
+      localStorage.removeItem('nirvaha_chat_sessions');
+    } catch (e) {}
+  };
+
   const addCustomTask = (task: Omit<TaskItem, 'id'>) => {
     const newTask: TaskItem = {
       ...task,
@@ -305,23 +643,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setTaskStatuses((prev) => ({ ...prev, [taskId]: status }));
   };
 
-  // Consent helpers
   const updateConsent = (id: string, status: 'allowed' | 'denied' | 'revoked') => {
     setConsentPreferences((prev) => ({ ...prev, [id]: status }));
   };
 
-  // Document status updater
   const updateDocumentStatus = (docId: string, status: StoredDocStatus) => {
     setUploadedDocs((prev) => ({ ...prev, [docId]: status }));
   };
 
-  // Strict citizen filter function
-  // Requirement 8:
-  // items.filter(item =>
-  //   item.role === userProfile.role &&
-  //   (item.states === "ALL" || item.states.includes(userProfile.state)) &&
-  //   (item.districts === "ALL" || !item.districts || item.districts.includes(userProfile.district))
-  // );
   const filterByCitizen = <T extends { role: RoleKey; states: string[] | 'ALL'; districts?: string[] | 'ALL' }>(
     items: T[]
   ): T[] => {
@@ -345,6 +674,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         userProfile,
         updateUserProfile,
         setRole,
+        authUser,
+        authToken,
+        signInWithSupabase,
+        signUpWithSupabase,
+        signOutSupabase,
         onboardingStep,
         setOnboardingStep,
         onboardingComplete,
@@ -353,9 +687,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activeTab,
         setActiveTab,
         chatMessages,
+        chatSessions,
+        activeChatSessionId,
         addChatMessage,
         updateChatMessage,
+        persistChatMessage,
         clearChat,
+        startNewChat,
+        loadChatSession,
+        deleteChatSession,
+        clearAllChatHistory,
         voiceTranscript,
         setVoiceTranscript,
         pendingVoiceQuery,

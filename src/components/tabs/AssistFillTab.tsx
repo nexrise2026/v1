@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FileSignature,
   ShieldCheck,
@@ -51,6 +51,30 @@ export const AssistFillTab: React.FC = () => {
 
   const activeFormConfig = availableForms.find((f) => f.id === selectedFormId) || availableForms[0];
 
+  // Reset selected form & wizard state whenever role/state/district or available forms change
+  useEffect(() => {
+    const firstId = availableForms[0]?.id || '';
+    if (!availableForms.some((f) => f.id === selectedFormId)) {
+      setSelectedFormId(firstId);
+    }
+    setCurrentStep(1);
+    setFieldValues({});
+    setVaultAutoFilled(false);
+    setSubmittedReceipt(null);
+  }, [userProfile.role, userProfile.state, userProfile.district, availableForms]);
+
+  // Helper to resolve canonical select option value to current localized display label
+  const getDisplayFieldValue = (fieldId: string): string => {
+    const raw = fieldValues[fieldId];
+    if (!raw) return '';
+    const field = activeFormConfig?.formSpecificFields.find((f) => f.id === fieldId);
+    if (field?.type === 'select' && field.options) {
+      const matched = field.options.find((opt) => opt.en === raw || getLoc(opt) === raw);
+      if (matched) return getLoc(matched);
+    }
+    return raw;
+  };
+
   const handleFieldChange = (fieldId: string, value: string) => {
     setFieldValues((prev) => ({ ...prev, [fieldId]: value }));
   };
@@ -62,12 +86,16 @@ export const AssistFillTab: React.FC = () => {
 
   // Automated Vault Access & Self-Fill Engine
   const handleAutoFillFromVault = () => {
+    if (!activeFormConfig) return;
     setIsScanningVault(true);
 
     setTimeout(() => {
       let extractedValues: Record<string, string> = {};
 
-      if (activeFormConfig.id === 'form-ssp-scholarship') {
+      if (
+        activeFormConfig.id === 'form-ssp-scholarship' ||
+        activeFormConfig.id === 'form-nsp-central-scholarship'
+      ) {
         extractedValues = {
           universityRollNo: userProfile.ageOrProofNumber || '1RV22CS045',
           courseYear: '2nd Year',
@@ -79,14 +107,23 @@ export const AssistFillTab: React.FC = () => {
           surveyNumber: '142/2A',
           cultivatedLandExtent: '2 Acres 10 Guntas',
         };
-      } else if (activeFormConfig.id === 'form-bocw-labour-card') {
+      } else if (
+        activeFormConfig.id === 'form-bocw-labour-card' ||
+        activeFormConfig.id === 'form-eshram-national'
+      ) {
         extractedValues = {
           primaryTrade: 'Masonry / Bricklaying',
-          employerName: 'District Infrastructure Contractor',
+          employerName:
+            activeFormConfig.id === 'form-eshram-national'
+              ? 'Self-Employed / Local Site'
+              : 'District Infrastructure Contractor',
         };
-      } else if (activeFormConfig.id === 'form-sandhya-suraksha-pension') {
+      } else if (
+        activeFormConfig.id === 'form-sandhya-suraksha-pension' ||
+        activeFormConfig.id === 'form-ignoaps-national-pension'
+      ) {
         extractedValues = {
-          exactAge: '66',
+          exactAge: activeFormConfig.id === 'form-ignoaps-national-pension' ? '64' : '66',
           livingArrangement: 'Living with Family / Children',
         };
       } else if (activeFormConfig.id === 'form-udid-registration') {
@@ -163,7 +200,7 @@ Income Band: ${userProfile.annualIncome || 'Unspecified'}
 DATA EXTRACTED & SUBMITTED FROM CITIZEN VAULT
 ----------------------------------------------
 ${activeFormConfig.formSpecificFields
-  .map((field) => `${getLoc(field.label)}: ${fieldValues[field.id] || 'Verified'}`)
+  .map((field) => `${getLoc(field.label)}: ${getDisplayFieldValue(field.id) || 'Verified'}`)
   .join('\n')}
 
 ATTACHED VAULT DOCUMENTS
@@ -182,7 +219,9 @@ Digitally certified by NIRVAHA AI Public Service Gateway.
     const link = document.createElement('a');
     link.href = url;
     link.download = `${submittedReceipt.refNumber}_Official_Receipt.txt`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
     showToast('Official receipt downloaded!');
   };
@@ -472,7 +511,7 @@ Digitally certified by NIRVAHA AI Public Service Gateway.
                         >
                           <option value="">{t.selectPlaceholder}</option>
                           {field.options.map((opt, idx) => (
-                            <option key={idx} value={getLoc(opt)}>
+                            <option key={idx} value={opt.en}>
                               {getLoc(opt)}
                             </option>
                           ))}
@@ -558,7 +597,7 @@ Digitally certified by NIRVAHA AI Public Service Gateway.
                     </p>
                     {activeFormConfig.formSpecificFields.map((f) => (
                       <p key={f.id}>
-                        <strong>{getLoc(f.label)}:</strong> {fieldValues[f.id] || 'Verified from Vault'}
+                        <strong>{getLoc(f.label)}:</strong> {getDisplayFieldValue(f.id) || 'Verified from Vault'}
                       </p>
                     ))}
                     <p>

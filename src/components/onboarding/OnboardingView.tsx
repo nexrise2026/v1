@@ -28,14 +28,19 @@ export const OnboardingView: React.FC = () => {
     updateUserProfile,
     setRole,
     completeOnboarding,
+    signInWithSupabase,
+    signUpWithSupabase,
   } = useApp();
 
   // Step 1 Form state
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [isOtherDevice, setIsOtherDevice] = useState(false);
   const [otp, setOtp] = useState('');
   const [step1Error, setStep1Error] = useState('');
+  const [step1Info, setStep1Info] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   // Step 3 Local state
   const [formName, setFormName] = useState(userProfile.fullName || '');
@@ -48,10 +53,11 @@ export const OnboardingView: React.FC = () => {
   const [formProofNo, setFormProofNo] = useState(userProfile.ageOrProofNumber || '');
   const [step3Error, setStep3Error] = useState('');
 
-  // Validation for Step 1
-  const handleStep1Continue = (e: React.FormEvent) => {
+  // Validation & Supabase Authentication for Step 1
+  const handleStep1Continue = async (e: React.FormEvent) => {
     e.preventDefault();
     setStep1Error('');
+    setStep1Info('');
 
     const trimmed = identifier.trim();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,15 +69,21 @@ export const OnboardingView: React.FC = () => {
     }
 
     const isEmail = emailRegex.test(trimmed);
-    const isPhone = phoneRegex.test(trimmed.replace(/\D/g, '')) && trimmed.length === 10;
+    let phoneDigits = trimmed.replace(/\D/g, '');
+    if (phoneDigits.length === 12 && phoneDigits.startsWith('91')) {
+      phoneDigits = phoneDigits.slice(2);
+    } else if (phoneDigits.length === 11 && phoneDigits.startsWith('0')) {
+      phoneDigits = phoneDigits.slice(1);
+    }
+    const isPhone = phoneRegex.test(phoneDigits);
 
     if (!isEmail && !isPhone) {
       setStep1Error('Please enter a valid email address or 10-digit Indian phone number.');
       return;
     }
 
-    if (!password || password.length < 4) {
-      setStep1Error('Password must be at least 4 characters.');
+    if (!password || password.length < 6) {
+      setStep1Error('Password must be at least 6 characters.');
       return;
     }
 
@@ -80,7 +92,29 @@ export const OnboardingView: React.FC = () => {
       return;
     }
 
-    // Passwords or OTPs are strictly never stored!
+    // Attempt real Supabase Auth when user signs in/up with email
+    if (isEmail) {
+      setIsAuthLoading(true);
+      const result =
+        authMode === 'signup'
+          ? await signUpWithSupabase(trimmed, password, userProfile.fullName)
+          : await signInWithSupabase(trimmed, password);
+      setIsAuthLoading(false);
+
+      if (result.status === 'email_confirmation_required') {
+        setStep1Info(result.message || 'Please confirm your email, then sign in.');
+        setAuthMode('signin');
+        return;
+      }
+
+      if (result.status === 'error') {
+        setStep1Error(result.message || 'Authentication failed. Please check your credentials.');
+        return;
+      }
+      // If authenticated OR not_configured (local mode), proceed cleanly to Step 2
+    }
+
+    // Passwords or OTPs are strictly never stored locally
     setOnboardingStep(2);
   };
 
@@ -223,6 +257,44 @@ export const OnboardingView: React.FC = () => {
               </div>
             )}
 
+            {step1Info && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+                {step1Info}
+              </div>
+            )}
+
+            {/* Sign In / Create Account Toggle */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-4 border border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('signin');
+                  setStep1Error('');
+                }}
+                className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  authMode === 'signin'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('signup');
+                  setStep1Error('');
+                }}
+                className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  authMode === 'signup'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+
             <form onSubmit={handleStep1Continue} className="space-y-4">
               {/* Email or Phone Input */}
               <div>
@@ -307,9 +379,10 @@ export const OnboardingView: React.FC = () => {
               {/* Primary Continue Button */}
               <button
                 type="submit"
-                className="bg-gradient-to-r from-[#0369a1] via-[#0891b2] to-[#0d9488] hover:from-[#0284c7] hover:to-[#0f766e] active:scale-[0.99] text-white font-semibold text-sm py-3 px-6 rounded-xl shadow-md shadow-cyan-900/20 transition-all w-full flex items-center justify-center gap-2 cursor-pointer mt-2"
+                disabled={isAuthLoading}
+                className="bg-gradient-to-r from-[#0369a1] via-[#0891b2] to-[#0d9488] hover:from-[#0284c7] hover:to-[#0f766e] active:scale-[0.99] disabled:opacity-60 text-white font-semibold text-sm py-3 px-6 rounded-xl shadow-md shadow-cyan-900/20 transition-all w-full flex items-center justify-center gap-2 cursor-pointer mt-2"
               >
-                <span>{t.btnContinue}</span>
+                <span>{isAuthLoading ? 'Authenticating...' : authMode === 'signup' ? 'Create Account & Continue →' : t.btnContinue}</span>
               </button>
             </form>
           </div>

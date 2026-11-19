@@ -189,3 +189,11 @@ export interface ChatMessage {
   timestamp: number;
   isVoice?: boolean;
 }
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  updatedAt: number;
+  languageCode: LanguageCode;
+  messages: ChatMessage[];
+}
